@@ -11,21 +11,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/gorilla/mux"
-	"github.com/lxc/lxd/client"
-	"gopkg.in/fsnotify.v0"
-	"gopkg.in/yaml.v2"
+	"github.com/lxc/incus/client"
+	"gopkg.in/yaml.v3"
 )
 
 // Global variables
-var lxdDaemon lxd.ContainerServer
+var incusDaemon incus.InstanceServer
 var config serverConfig
 
 type serverConfig struct {
-	Container string   `yaml:"container"`
-	Image     string   `yaml:"image"`
-	Profiles  []string `yaml:"profiles"`
-	Command   []string `yaml:"command"`
+	Instance string   `yaml:"instance"`
+	Image    string   `yaml:"image"`
+	Profiles []string `yaml:"profiles"`
+	Command  []string `yaml:"command"`
 
 	Feedback        bool `yaml:"feedback"`
 	FeedbackTimeout int  `yaml:"feedback_timeout"`
@@ -40,7 +40,7 @@ type serverConfig struct {
 	ServerAddr           string   `yaml:"server_addr"`
 	ServerBannedIPs      []string `yaml:"server_banned_ips"`
 	ServerConsoleOnly    bool     `yaml:"server_console_only"`
-	ServerContainersMax  int      `yaml:"server_containers_max"`
+	ServerInstanceMax    int      `yaml:"server_instance_max"`
 	ServerIPv6Only       bool     `yaml:"server_ipv6_only"`
 	ServerMaintenance    bool     `yaml:"server_maintenance"`
 	ServerStatisticsKeys []string `yaml:"server_statistics_keys"`
@@ -55,12 +55,12 @@ const (
 	serverOperational statusCode = 0
 	serverMaintenance statusCode = 1
 
-	containerStarted      statusCode = 0
-	containerInvalidTerms statusCode = 1
-	containerServerFull   statusCode = 2
-	containerQuotaReached statusCode = 3
-	containerUserBanned   statusCode = 4
-	containerUnknownError statusCode = 5
+	instanceStarted      statusCode = 0
+	instanceInvalidTerms statusCode = 1
+	instanceServerFull   statusCode = 2
+	instanceQuotaReached statusCode = 3
+	instanceUserBanned   statusCode = 4
+	instanceUnknownError statusCode = 5
 )
 
 func main() {
@@ -73,9 +73,9 @@ func main() {
 }
 
 func parseConfig() error {
-	data, err := ioutil.ReadFile("lxd-demo.yaml")
+	data, err := ioutil.ReadFile("config.yaml")
 	if os.IsNotExist(err) {
-		return fmt.Errorf("The configuration file (lxd-demo.yaml) doesn't exist.")
+		return fmt.Errorf("The configuration file (config.yaml) doesn't exist.")
 	} else if err != nil {
 		return fmt.Errorf("Unable to read the configuration: %s", err)
 	}
@@ -98,8 +98,8 @@ func parseConfig() error {
 	io.WriteString(hash, config.ServerTerms)
 	config.serverTermsHash = fmt.Sprintf("%x", hash.Sum(nil))
 
-	if config.Container == "" && config.Image == "" {
-		return fmt.Errorf("No container or image specified in configuration")
+	if config.Instance == "" && config.Image == "" {
+		return fmt.Errorf("No instance or image specified in configuration")
 	}
 
 	return nil
@@ -120,7 +120,7 @@ func run() error {
 		return fmt.Errorf("Unable to setup fsnotify: %s", err)
 	}
 
-	err = watcher.Watch(".")
+	err = watcher.Add(".")
 	if err != nil {
 		return fmt.Errorf("Unable to setup fsnotify watch: %s", err)
 	}
@@ -128,12 +128,12 @@ func run() error {
 	go func() {
 		for {
 			select {
-			case ev := <-watcher.Event:
-				if ev.Name != "./lxd-demo.yaml" {
+			case ev := <-watcher.Events:
+				if ev.Name != "./config.yaml" {
 					continue
 				}
 
-				if !ev.IsModify() {
+				if !ev.Has(fsnotify.Write) {
 					continue
 				}
 
@@ -142,29 +142,29 @@ func run() error {
 				if err != nil {
 					fmt.Printf("Failed to parse configuration: %s\n", err)
 				}
-			case err := <-watcher.Error:
+			case err := <-watcher.Errors:
 				fmt.Printf("Inotify error: %s\n", err)
 			}
 		}
 	}()
 
-	// Connect to the LXD daemon
+	// Connect to the Incus daemon
 	warning := false
 	for {
-		lxdDaemon, err = lxd.ConnectLXDUnix("", nil)
+		incusDaemon, err = incus.ConnectIncusUnix("", nil)
 		if err == nil {
 			break
 		}
 
 		if !warning {
-			fmt.Printf("Waiting for the LXD server to come online.\n")
+			fmt.Printf("Waiting for the Incus server to come online.\n")
 			warning = true
 		}
 		time.Sleep(time.Second)
 	}
 
 	if warning {
-		fmt.Printf("LXD is now available. Daemon starting.\n")
+		fmt.Printf("Incus is now available. Daemon starting.\n")
 	}
 
 	// Setup the database
@@ -173,28 +173,28 @@ func run() error {
 		return fmt.Errorf("Failed to setup the database: %s", err)
 	}
 
-	// Restore cleanup handler for existing containers
-	containers, err := dbActive()
+	// Restore cleanup handler for existing instances
+	instances, err := dbActive()
 	if err != nil {
-		return fmt.Errorf("Unable to read current containers: %s", err)
+		return fmt.Errorf("Unable to read current instances: %s", err)
 	}
 
-	for _, entry := range containers {
-		containerID := int64(entry[0].(int))
-		containerName := entry[1].(string)
-		containerExpiry := int64(entry[2].(int))
+	for _, entry := range instances {
+		instanceID := int64(entry[0].(int))
+		instanceName := entry[1].(string)
+		instanceExpiry := int64(entry[2].(int))
 
-		duration := containerExpiry - time.Now().Unix()
+		duration := instanceExpiry - time.Now().Unix()
 		timeDuration, err := time.ParseDuration(fmt.Sprintf("%ds", duration))
 		if err != nil || duration <= 0 {
-			lxdForceDelete(lxdDaemon, containerName)
-			dbExpire(containerID)
+			incusForceDelete(incusDaemon, instanceName)
+			dbExpire(instanceID)
 			continue
 		}
 
 		time.AfterFunc(timeDuration, func() {
-			lxdForceDelete(lxdDaemon, containerName)
-			dbExpire(containerID)
+			incusForceDelete(incusDaemon, instanceName)
+			dbExpire(instanceID)
 		})
 	}
 

@@ -11,10 +11,9 @@ import (
 
 	"github.com/dustinkirkland/golang-petname"
 	"github.com/gorilla/websocket"
-	"github.com/lxc/lxd/client"
-	lxdconfig "github.com/lxc/lxd/lxc/config"
-	"github.com/lxc/lxd/shared"
-	"github.com/lxc/lxd/shared/api"
+	"github.com/lxc/incus/client"
+	"github.com/lxc/incus/shared"
+	"github.com/lxc/incus/shared/api"
 	"github.com/pborman/uuid"
 )
 
@@ -66,8 +65,8 @@ func restFeedbackPostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the container
-	sessionId, _, _, _, _, sessionExpiry, err := dbGetContainer(id, false)
+	// Get the instance
+	sessionId, _, _, _, _, sessionExpiry, err := dbGetInstance(id, false)
 	if err != nil || sessionId == -1 {
 		http.Error(w, "Session not found", 404)
 		return
@@ -108,8 +107,8 @@ func restFeedbackGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the container
-	sessionId, _, _, _, _, _, err := dbGetContainer(id, false)
+	// Get the instance
+	sessionId, _, _, _, _, _, err := dbGetInstance(id, false)
 	if err != nil || sessionId == -1 {
 		http.Error(w, "Session not found", 404)
 		return
@@ -157,17 +156,17 @@ func restStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get some container data
-	var containersCount int
-	var containersNext int
+	// Get some instance data
+	var instanceCount int
+	var instanceNext int
 
-	containersCount, err = dbActiveCount()
+	instanceCount, err = dbActiveCount()
 	if err != nil {
 		failure = true
 	}
 
-	if containersCount >= config.ServerContainersMax {
-		containersNext, err = dbNextExpire()
+	if instanceCount >= config.ServerInstanceMax {
+		instanceNext, err = dbNextExpire()
 		if err != nil {
 			failure = true
 		}
@@ -185,9 +184,9 @@ func restStatusHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		body["server_status"] = serverMaintenance
 	}
-	body["containers_count"] = containersCount
-	body["containers_max"] = config.ServerContainersMax
-	body["containers_next"] = containersNext
+	body["instance_count"] = instanceCount
+	body["instance_max"] = config.ServerInstanceMax
+	body["instance_next"] = instanceNext
 
 	err = json.NewEncoder(w).Encode(body)
 	if err != nil {
@@ -292,7 +291,7 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract IP
 	requestIP, _, err := restClientIP(r)
 	if err != nil {
-		restStartError(w, err, containerUnknownError)
+		restStartError(w, err, instanceUnknownError)
 		return
 	}
 
@@ -304,43 +303,43 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if requestTerms != config.serverTermsHash {
-		restStartError(w, nil, containerInvalidTerms)
+		restStartError(w, nil, instanceInvalidTerms)
 		return
 	}
 
 	// Check for banned users
 	if shared.StringInSlice(requestIP, config.ServerBannedIPs) {
-		restStartError(w, nil, containerUserBanned)
+		restStartError(w, nil, instanceUserBanned)
 		return
 	}
 
-	// Count running containers
-	containersCount, err := dbActiveCount()
+	// Count running instances
+	instanceCount, err := dbActiveCount()
 	if err != nil {
-		containersCount = config.ServerContainersMax
+		instanceCount = config.ServerInstanceMax
 	}
 
 	// Server is full
-	if containersCount >= config.ServerContainersMax {
-		restStartError(w, nil, containerServerFull)
+	if instanceCount >= config.ServerInstanceMax {
+		restStartError(w, nil, instanceServerFull)
 		return
 	}
 
-	// Count container for requestor IP
-	containersCount, err = dbActiveCountForIP(requestIP)
+	// Count instance for requestor IP
+	instanceCount, err = dbActiveCountForIP(requestIP)
 	if err != nil {
-		containersCount = config.QuotaSessions
+		instanceCount = config.QuotaSessions
 	}
 
-	if config.QuotaSessions != 0 && containersCount >= config.QuotaSessions {
-		restStartError(w, nil, containerQuotaReached)
+	if config.QuotaSessions != 0 && instanceCount >= config.QuotaSessions {
+		restStartError(w, nil, instanceQuotaReached)
 		return
 	}
 
-	// Create the container
-	containerName := fmt.Sprintf("tryit-%s", petname.Adjective())
-	containerUsername := petname.Adjective()
-	containerPassword := petname.Adjective()
+	// Create the instance
+	instanceName := fmt.Sprintf("tryit-%s", petname.Adjective())
+	instanceUsername := petname.Adjective()
+	instancePassword := petname.Adjective()
 	id := uuid.NewRandom().String()
 
 	// Config
@@ -369,90 +368,66 @@ users:
    plain_text_passwd: %s
    lock_passwd: False
    shell: /bin/bash
-`, containerUsername, containerPassword)
+`, instanceUsername, instancePassword)
 	}
 
-	var rop lxd.RemoteOperation
-	if config.Container != "" {
-		args := lxd.ContainerCopyArgs{
-			Name:          containerName,
-			ContainerOnly: true,
+	if config.Instance != "" {
+		args := incus.InstanceCopyArgs{
+			Name:         instanceName,
+			InstanceOnly: true,
 		}
 
-		source, _, err := lxdDaemon.GetContainer(config.Container)
+		source, _, err := incusDaemon.GetInstance(config.Instance)
 		if err != nil {
-			restStartError(w, err, containerUnknownError)
+			restStartError(w, err, instanceUnknownError)
 			return
 		}
 
 		source.Config = ctConfig
 		source.Profiles = config.Profiles
 
-		rop, err = lxdDaemon.CopyContainer(lxdDaemon, *source, &args)
+		rop, err := incusDaemon.CopyInstance(incusDaemon, *source, &args)
 		if err != nil {
-			restStartError(w, err, containerUnknownError)
+			restStartError(w, err, instanceUnknownError)
+			return
+		}
+
+		err = rop.Wait()
+		if err != nil {
+			restStartError(w, err, instanceUnknownError)
 			return
 		}
 	} else {
-		defaultConfig := lxdconfig.DefaultConfig
-
-		remote, fingerprint, err := defaultConfig.ParseRemote(config.Image)
-		if err != nil {
-			restStartError(w, err, containerUnknownError)
-			return
-		}
-
-		var d lxd.ImageServer
-
-		if remote == "local" {
-			d = lxdDaemon
-		} else {
-			d, err = defaultConfig.GetImageServer(remote)
-			if err != nil {
-				restStartError(w, err, containerUnknownError)
-				return
-			}
-		}
-
-		if fingerprint == "" {
-			fingerprint = "default"
-		}
-
-		alias, _, err := d.GetImageAlias(fingerprint)
-		if err == nil {
-			fingerprint = alias.Target
-		}
-
-		imgInfo, _, err := d.GetImage(fingerprint)
-		if err != nil {
-			restStartError(w, err, containerUnknownError)
-			return
-		}
-
-		req := api.ContainersPost{
-			Name: containerName,
+		req := api.InstancesPost{
+			Name: instanceName,
+			Source: api.InstanceSource{
+				Type:     "image",
+				Alias:    config.Image,
+				Server:   "https://images.linuxcontainers.org",
+				Protocol: "simplestreams",
+			},
 		}
 		req.Config = ctConfig
 		req.Profiles = config.Profiles
 
-		rop, err = lxdDaemon.CreateContainerFromImage(d, *imgInfo, req)
+		rop, err := incusDaemon.CreateInstance(req)
 		if err != nil {
-			restStartError(w, err, containerUnknownError)
+			restStartError(w, err, instanceUnknownError)
+			return
+		}
+
+		err = rop.Wait()
+		if err != nil {
+			restStartError(w, err, instanceUnknownError)
 			return
 		}
 	}
 
-	err = rop.Wait()
+	// Configure the instance devices
+	ct, etag, err := incusDaemon.GetInstance(instanceName)
 	if err != nil {
-		restStartError(w, err, containerUnknownError)
-		return
-	}
-
-	// Configure the container devices
-	ct, etag, err := lxdDaemon.GetContainer(containerName)
-	if err != nil {
-		lxdForceDelete(lxdDaemon, containerName)
-		restStartError(w, err, containerUnknownError)
+		incusForceDelete(incusDaemon, instanceName)
+		restStartError(w, err, instanceUnknownError)
 		return
 	}
 
@@ -466,51 +441,51 @@ users:
 		}
 	}
 
-	op, err := lxdDaemon.UpdateContainer(containerName, ct.Writable(), etag)
+	op, err := incusDaemon.UpdateInstance(instanceName, ct.Writable(), etag)
 	if err != nil {
-		lxdForceDelete(lxdDaemon, containerName)
-		restStartError(w, err, containerUnknownError)
+		incusForceDelete(incusDaemon, instanceName)
+		restStartError(w, err, instanceUnknownError)
 		return
 	}
 
 	err = op.Wait()
 	if err != nil {
-		lxdForceDelete(lxdDaemon, containerName)
-		restStartError(w, err, containerUnknownError)
+		incusForceDelete(incusDaemon, instanceName)
+		restStartError(w, err, instanceUnknownError)
 		return
 	}
 
-	// Start the container
-	req := api.ContainerStatePut{
+	// Start the instance
+	req := api.InstanceStatePut{
 		Action:  "start",
 		Timeout: -1,
 	}
 
-	op, err = lxdDaemon.UpdateContainerState(containerName, req, "")
+	op, err = incusDaemon.UpdateInstanceState(instanceName, req, "")
 	if err != nil {
-		lxdForceDelete(lxdDaemon, containerName)
-		restStartError(w, err, containerUnknownError)
+		incusForceDelete(incusDaemon, instanceName)
+		restStartError(w, err, instanceUnknownError)
 		return
 	}
 
 	err = op.Wait()
 	if err != nil {
-		lxdForceDelete(lxdDaemon, containerName)
-		restStartError(w, err, containerUnknownError)
+		incusForceDelete(incusDaemon, instanceName)
+		restStartError(w, err, instanceUnknownError)
 		return
 	}
 
 	// Get the IP (30s timeout)
-	var containerIP string
+	var instanceIP string
 	if !config.ServerConsoleOnly {
 		time.Sleep(2 * time.Second)
 		timeout := 30
 		for timeout != 0 {
 			timeout--
-			ct, _, err := lxdDaemon.GetContainerState(containerName)
+			ct, _, err := incusDaemon.GetInstanceState(instanceName)
 			if err != nil {
-				lxdForceDelete(lxdDaemon, containerName)
-				restStartError(w, err, containerUnknownError)
+				incusForceDelete(incusDaemon, instanceName)
+				restStartError(w, err, instanceUnknownError)
 				return
 			}
 
@@ -532,61 +507,61 @@ users:
 						continue
 					}
 
-					containerIP = addr.Address
+					instanceIP = addr.Address
 					break
 				}
 
-				if containerIP != "" {
+				if instanceIP != "" {
 					break
 				}
 			}
 
-			if containerIP != "" {
+			if instanceIP != "" {
 				break
 			}
 
 			time.Sleep(500 * time.Millisecond)
 		}
 	} else {
-		containerIP = "console-only"
+		instanceIP = "console-only"
 	}
 
-	containerExpiry := time.Now().Unix() + int64(config.QuotaTime)
+	instanceExpiry := time.Now().Unix() + int64(config.QuotaTime)
 
 	if !config.ServerConsoleOnly {
-		body["ip"] = containerIP
-		body["username"] = containerUsername
-		body["password"] = containerPassword
-		body["fqdn"] = fmt.Sprintf("%s.lxd", containerName)
+		body["ip"] = instanceIP
+		body["username"] = instanceUsername
+		body["password"] = instancePassword
+		body["fqdn"] = fmt.Sprintf("%s.incus", instanceName)
 	}
 	body["id"] = id
-	body["expiry"] = containerExpiry
+	body["expiry"] = instanceExpiry
 
 	// Setup cleanup code
 	duration, err := time.ParseDuration(fmt.Sprintf("%ds", config.QuotaTime))
 	if err != nil {
-		lxdForceDelete(lxdDaemon, containerName)
-		restStartError(w, err, containerUnknownError)
+		incusForceDelete(incusDaemon, instanceName)
+		restStartError(w, err, instanceUnknownError)
 		return
 	}
 
-	containerID, err := dbNew(id, containerName, containerIP, containerUsername, containerPassword, containerExpiry, requestDate, requestIP, requestTerms)
+	instanceID, err := dbNew(id, instanceName, instanceIP, instanceUsername, instancePassword, instanceExpiry, requestDate, requestIP, requestTerms)
 	if err != nil {
-		lxdForceDelete(lxdDaemon, containerName)
-		restStartError(w, err, containerUnknownError)
+		incusForceDelete(incusDaemon, instanceName)
+		restStartError(w, err, instanceUnknownError)
 		return
 	}
 
 	time.AfterFunc(duration, func() {
-		lxdForceDelete(lxdDaemon, containerName)
-		dbExpire(containerID)
+		incusForceDelete(incusDaemon, instanceName)
+		dbExpire(instanceID)
 	})
 
 	// Return to the client
-	body["status"] = containerStarted
+	body["status"] = instanceStarted
 	err = json.NewEncoder(w).Encode(body)
 	if err != nil {
-		lxdForceDelete(lxdDaemon, containerName)
+		incusForceDelete(incusDaemon, instanceName)
 		http.Error(w, "Internal server error", 500)
 		return
 	}
@@ -608,8 +583,8 @@ func restInfoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the container
-	sessionId, containerName, containerIP, containerUsername, containerPassword, containerExpiry, err := dbGetContainer(id, false)
+	// Get the instance
+	sessionId, instanceName, instanceIP, instanceUsername, instancePassword, instanceExpiry, err := dbGetInstance(id, false)
 	if err != nil || sessionId == -1 {
 		http.Error(w, "Session not found", 404)
 		return
@@ -618,19 +593,19 @@ func restInfoHandler(w http.ResponseWriter, r *http.Request) {
 	body := make(map[string]interface{})
 
 	if !config.ServerConsoleOnly {
-		body["ip"] = containerIP
-		body["username"] = containerUsername
-		body["password"] = containerPassword
-		body["fqdn"] = fmt.Sprintf("%s.lxd", containerName)
+		body["ip"] = instanceIP
+		body["username"] = instanceUsername
+		body["password"] = instancePassword
+		body["fqdn"] = fmt.Sprintf("%s.incus", instanceName)
 	}
 	body["id"] = id
-	body["expiry"] = containerExpiry
+	body["expiry"] = instanceExpiry
 
 	// Return to the client
-	body["status"] = containerStarted
+	body["status"] = instanceStarted
 	err = json.NewEncoder(w).Encode(body)
 	if err != nil {
-		lxdForceDelete(lxdDaemon, containerName)
+		incusForceDelete(incusDaemon, instanceName)
 		http.Error(w, "Internal server error", 500)
 		return
 	}
@@ -698,8 +673,8 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the container
-	sessionId, containerName, _, _, _, _, err := dbGetContainer(id, true)
+	// Get the instance
+	sessionId, instanceName, _, _, _, _, err := dbGetInstance(id, true)
 	if err != nil || sessionId == -1 {
 		http.Error(w, "Session not found", 404)
 		return
@@ -743,7 +718,7 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// Connect to the container
+	// Connect to the instance
 	env := make(map[string]string)
 	env["USER"] = "root"
 	env["HOME"] = "/root"
@@ -753,42 +728,9 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 	outRead, outWrite := io.Pipe()
 
 	// read handler
-	go func(conn *websocket.Conn, r io.Reader) {
-		in := shared.ReaderToChannel(r, -1)
-
-		for {
-			buf, ok := <-in
-			if !ok {
-				break
-			}
-
-			err = conn.WriteMessage(websocket.TextMessage, buf)
-			if err != nil {
-				break
-			}
-		}
-	}(conn, outRead)
-
-	// write handler
-	go func(conn *websocket.Conn, w io.Writer) {
-		for {
-			mt, payload, err := conn.ReadMessage()
-			if err != nil {
-				if err != io.EOF {
-					break
-				}
-			}
-
-			switch mt {
-			case websocket.BinaryMessage:
-				continue
-			case websocket.TextMessage:
-				w.Write(payload)
-			default:
-				break
-			}
-		}
-	}(conn, inWrite)
+	connWrapper := &wrapper{conn: conn}
+	go io.Copy(inWrite, connWrapper)
+	go io.Copy(connWrapper, outRead)
 
 	// control socket handler
 	handler := func(conn *websocket.Conn) {
@@ -800,7 +742,7 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	req := api.ContainerExecPost{
+	req := api.InstanceExecPost{
 		Command:     config.Command,
 		WaitForWS:   true,
 		Interactive: true,
@@ -809,7 +751,7 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 		Height:      heightInt,
 	}
 
-	execArgs := lxd.ContainerExecArgs{
+	execArgs := incus.InstanceExecArgs{
 		Stdin:    inRead,
 		Stdout:   outWrite,
 		Stderr:   outWrite,
@@ -817,7 +759,7 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 		DataDone: make(chan bool),
 	}
 
-	op, err := lxdDaemon.ExecContainer(containerName, req, &execArgs)
+	op, err := incusDaemon.ExecInstance(instanceName, req, &execArgs)
 	if err != nil {
 		http.Error(w, "Internal server error", 500)
 		return

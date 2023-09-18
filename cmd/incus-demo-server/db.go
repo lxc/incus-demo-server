@@ -15,7 +15,7 @@ var db *sql.DB
 func dbSetup() error {
 	var err error
 
-	db, err = sql.Open("sqlite3", fmt.Sprintf("lxd-demo.sqlite3?_busy_timeout=5000&_txlock=exclusive"))
+	db, err = sql.Open("sqlite3", fmt.Sprintf("database.sqlite3?_busy_timeout=5000&_txlock=exclusive"))
 	if err != nil {
 		return err
 	}
@@ -34,11 +34,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     uuid VARCHAR(36) NOT NULL,
     status INTEGER NOT NULL,
-    container_name VARCHAR(64) NOT NULL,
-    container_ip VARCHAR(39) NOT NULL,
-    container_username VARCHAR(10) NOT NULL,
-    container_password VARCHAR(10) NOT NULL,
-    container_expiry INT NOT NULL,
+    instance_name VARCHAR(64) NOT NULL,
+    instance_ip VARCHAR(39) NOT NULL,
+    instance_username VARCHAR(10) NOT NULL,
+    instance_password VARCHAR(10) NOT NULL,
+    instance_expiry INT NOT NULL,
     request_date INT NOT NULL,
     request_ip VARCHAR(39) NOT NULL,
     request_terms VARCHAR(64) NOT NULL
@@ -123,11 +123,11 @@ func dbGetStats(period string, unique bool, network *net.IPNet) (int64, error) {
 }
 
 func dbActive() ([][]interface{}, error) {
-	q := fmt.Sprintf("SELECT id, container_name, container_expiry FROM sessions WHERE status=0;")
-	var containerID int
-	var containerName string
-	var containerExpiry int
-	outfmt := []interface{}{containerID, containerName, containerExpiry}
+	q := fmt.Sprintf("SELECT id, instance_name, instance_expiry FROM sessions WHERE status=0;")
+	var instanceID int
+	var instanceName string
+	var instanceExpiry int
+	outfmt := []interface{}{instanceID, instanceName, instanceExpiry}
 	result, err := dbQueryScan(db, q, nil, outfmt)
 	if err != nil {
 		return nil, err
@@ -136,22 +136,22 @@ func dbActive() ([][]interface{}, error) {
 	return result, nil
 }
 
-func dbGetContainer(id string, active bool) (int64, string, string, string, string, int64, error) {
+func dbGetInstance(id string, active bool) (int64, string, string, string, string, int64, error) {
 	var sessionId int64
-	var containerName string
-	var containerIP string
-	var containerUsername string
-	var containerPassword string
-	var containerExpiry int64
+	var instanceName string
+	var instanceIP string
+	var instanceUsername string
+	var instancePassword string
+	var instanceExpiry int64
 	var err error
 	var rows *sql.Rows
 
 	sessionId = -1
 
 	if active {
-		rows, err = dbQuery(db, "SELECT id, container_name, container_ip, container_username, container_password, container_expiry FROM sessions WHERE status=0 AND uuid=?;", id)
+		rows, err = dbQuery(db, "SELECT id, instance_name, instance_ip, instance_username, instance_password, instance_expiry FROM sessions WHERE status=0 AND uuid=?;", id)
 	} else {
-		rows, err = dbQuery(db, "SELECT id, container_name, container_ip, container_username, container_password, container_expiry FROM sessions WHERE uuid=?;", id)
+		rows, err = dbQuery(db, "SELECT id, instance_name, instance_ip, instance_username, instance_password, instance_expiry FROM sessions WHERE uuid=?;", id)
 	}
 	if err != nil {
 		return -1, "", "", "", "", 0, err
@@ -160,10 +160,10 @@ func dbGetContainer(id string, active bool) (int64, string, string, string, stri
 	defer rows.Close()
 
 	for rows.Next() {
-		rows.Scan(&sessionId, &containerName, &containerIP, &containerUsername, &containerPassword, &containerExpiry)
+		rows.Scan(&sessionId, &instanceName, &instanceIP, &instanceUsername, &instancePassword, &instanceExpiry)
 	}
 
-	return sessionId, containerName, containerIP, containerUsername, containerPassword, containerExpiry, nil
+	return sessionId, instanceName, instanceIP, instanceUsername, instancePassword, instanceExpiry, nil
 }
 
 func dbGetFeedback(id int64) (int64, int64, string, int64, string, error) {
@@ -190,30 +190,30 @@ func dbGetFeedback(id int64) (int64, int64, string, int64, string, error) {
 	return feedbackId, rating, email, emailUse, feedback, nil
 }
 
-func dbNew(id string, containerName string, containerIP string, containerUsername string, containerPassword string, containerExpiry int64, requestDate int64, requestIP string, requestTerms string) (int64, error) {
+func dbNew(id string, instanceName string, instanceIP string, instanceUsername string, instancePassword string, instanceExpiry int64, requestDate int64, requestIP string, requestTerms string) (int64, error) {
 	res, err := db.Exec(`
 INSERT INTO sessions (
 	status,
 	uuid,
-	container_name,
-	container_ip,
-	container_username,
-	container_password,
-	container_expiry,
+	instance_name,
+	instance_ip,
+	instance_username,
+	instance_password,
+	instance_expiry,
 	request_date,
 	request_ip,
 	request_terms) VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-`, id, containerName, containerIP, containerUsername, containerPassword, containerExpiry, requestDate, requestIP, requestTerms)
+`, id, instanceName, instanceIP, instanceUsername, instancePassword, instanceExpiry, requestDate, requestIP, requestTerms)
 	if err != nil {
 		return 0, err
 	}
 
-	containerID, err := res.LastInsertId()
+	instanceID, err := res.LastInsertId()
 	if err != nil {
 		return 0, err
 	}
 
-	return containerID, nil
+	return instanceID, nil
 }
 
 func dbRecordFeedback(id int64, feedback Feedback) error {
@@ -283,7 +283,7 @@ func dbActiveCountForIP(ip string) (int, error) {
 func dbNextExpire() (int, error) {
 	var expire int
 
-	statement := `SELECT MIN(container_expiry) FROM sessions WHERE status=0;`
+	statement := `SELECT MIN(instance_expiry) FROM sessions WHERE status=0;`
 	err := db.QueryRow(statement).Scan(&expire)
 	if err != nil {
 		return 0, err

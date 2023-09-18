@@ -1,74 +1,46 @@
-# LXD demo server
+# Incus demo server
 
-This repository contains the backend code of the LXD online demo service.
+This repository contains the backend code of the Incus online demo service.
 
-[https://linuxcontainers.org/lxd/try-it](https://linuxcontainers.org/lxd/try-it)
+[https://linuxcontainers.org/incus/try-it](https://linuxcontainers.org/incus/try-it)
 
 ## What is it
 
 Simply put, it's a small Go daemon exposing a REST API that users
 (mostly our javascript client) can interact with to create temporary
-test containers and attach to that container's console.
+test instances and attach to that instance's console.
 
-Those containers come with a bunch of resource limitations and an
-expiry, when the container expires, it's automatically deleted.
+Those instances come with a bunch of resource limitations and an
+expiry, when the instance expires, it's automatically deleted.
 
 The main client can be found at the URL above, with its source available here:  
 [https://github.com/lxc/linuxcontainers.org](https://github.com/lxc/linuxcontainers.org)
 
-## Installing on Ubuntu
-The easiest way to get the demo server running on Ubuntu is by using the snap package.
-
-First install and configure LXD itself:
-
-```
-sudo snap install lxd
-sudo lxd init
-```
-
-Then install and configure the LXD demo server:
-
-```
-sudo snap install lxd-demo-server
-sudo snap connect lxd-demo-server:lxd lxd:lxd
-sudo lxd-demo-server.configure
-```
-
-You can then access the server at: http://IP-ADDRESS:8080/
-
 ## Dependencies
 
-The server needs to be able to talk to a LXD daemon over the local unix
-socket, so you need to have a LXD daemon installed and functional before
-using this server.
+The server needs to be able to talk to an Incus daemon over the local unix
+socket or a remote HTTPS connection, so you need to have a Incus daemon
+installed and functional before using this server.
 
-Other than that, you can pull all the other necessary dependencies with:
+Other than that, you can build the daemon with:
 
-    go get github.com/lxc/lxd-demo-server
-
-## Building it
-
-A very simple:
-
-    go build
-
-Should do the trick.
+    go install github.com/lxc/incus-demo-server/cmd/incus-demo-server@latest
 
 ## Running it
 
 To run your own, you should start by copying the example configuration
-file "lxd-demo.yaml.example" to "lxd-demo.yaml", then update its content
+file "config.yaml.example" to "config.yaml", then update its content
 according to your environment.
 
-You will either need a container to copy for every request or a
-container image to use, set that up and set the appropriate
+You will either need an instance to copy for every request or an
+instance image to use, set that up and set the appropriate
 configuration key.
 
 Once done, simply run the daemon with:
 
-    ./lxd-demo-server
+    ./incus-demo-server
 
-The daemon isn't verbose at all, in fact it will only log critical LXD errors.
+The daemon isn't verbose at all, in fact it will only log critical Incus errors.
 
 You can test things with:
 
@@ -80,7 +52,7 @@ It will automatically reload the configuration after it's changed.
 
 ## Bug reports
 
-Bug reports can be filed at https://github.com/lxc/lxd-demo-server/issues/new
+Bug reports can be filed at https://github.com/lxc/incus-demo-server/issues/new
 
 ## Contributing
 
@@ -95,4 +67,4 @@ We use the LXC mailing-lists for developer and user discussions, you can
 find and subscribe to those at: https://lists.linuxcontainers.org
 
 If you prefer live discussions, some of us also hang out in
-[#lxcontainers](http://webchat.freenode.net/?channels=#lxcontainers) on irc.freenode.net.
+[#lxc](https://web.libera.chat/#lxc) on libera.chat.

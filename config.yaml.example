@@ -1,9 +1,8 @@
-container: "my-base-container"
+instance: "my-base-instance"
 image: "my-image"
 command: ["bash"]
 profiles:
     - default
-    - docker
 feedback: true
 feedback_timeout: 30
 quota_cpu: 1
@@ -16,16 +15,16 @@ server_addr: "[::]:8080"
 server_banned_ips:
     - 1.2.3.4
 server_console_only: false
-server_containers_max: 50
+server_instance_max: 50
 server_ipv6_only: true
 server_maintenance: false
 server_statistics_keys:
     - 69280011-c8a5-4ef9-ae3d-e7caf4d06e06
 server_terms: |-
-  By using the LXD demonstration server, you agree that:<br />
+  By using the Incus demonstration server, you agree that:<br />
   <ul>
     <li>Access to this service may be revoked at any time for any reason</li>
-    <li>Access to this service is solely provided to evaluate LXD</li>
+    <li>Access to this service is solely provided to evaluate Incus</li>
     <li>Your IP address, access time and activity on the test server may be recorded</li>
     <li>Any abuse of this service may lead to a ban or other applicable actions</li>
   </ul>

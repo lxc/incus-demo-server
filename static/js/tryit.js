@@ -170,7 +170,7 @@ $(document).ready(function() {
             success: function(data) {
                 if (data.server_console_only == true) {
                     $('#tryit_ssh_row').css("display", "none");
-                    $('#tryit_lxd_row').css("display", "none");
+                    $('#tryit_incus_row').css("display", "none");
                 }
 
                 if (data.server_status == 1) {
@@ -183,8 +183,8 @@ $(document).ready(function() {
 
                 $('#tryit_protocol').text(data.client_protocol);
                 $('#tryit_address').text(data.client_address);
-                $('#tryit_count').text(data.containers_count);
-                $('#tryit_max').text(data.containers_max);
+                $('#tryit_count').text(data.instance_count);
+                $('#tryit_max').text(data.instance_max);
                 $('#tryit_online_message').css("display", "inherit");
                 $('#tryit_status_panel').css("display", "inherit");
 
@@ -219,11 +219,11 @@ $(document).ready(function() {
                     return
                 }
 
-                $('.tryit_container_id').text(data.id);
-                $('.tryit_container_ip').text(data.ip);
-                $('.tryit_container_fqdn').text(data.fqdn);
-                $('.tryit_container_username').text(data.username);
-                $('.tryit_container_password').text(data.password);
+                $('.tryit_instance_id').text(data.id);
+                $('.tryit_instance_ip').text(data.ip);
+                $('.tryit_instance_fqdn').text(data.fqdn);
+                $('.tryit_instance_username').text(data.username);
+                $('.tryit_instance_password').text(data.password);
 
                 initializeClock('tryit_clock', data.expiry);
 
@@ -279,11 +279,11 @@ $(document).ready(function() {
                 return
             }
 
-            $('.tryit_container_console').text(data.id);
-            $('.tryit_container_ip').text(data.ip);
-            $('.tryit_container_fqdn').text(data.fqdn);
-            $('.tryit_container_username').text(data.username);
-            $('.tryit_container_password').text(data.password);
+            $('.tryit_instance_console').text(data.id);
+            $('.tryit_instance_ip').text(data.ip);
+            $('.tryit_instance_fqdn').text(data.fqdn);
+            $('.tryit_instance_username').text(data.username);
+            $('.tryit_instance_password').text(data.password);
             initializeClock('tryit_clock', data.expiry);
 
             $('#tryit_status_panel').css("display", "none");
