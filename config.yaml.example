@@ -6,6 +6,11 @@ server:
     feedback:
       enabled: true
       timeout: 30
+      email:
+        smtp: SERVER:PORT
+        from: ADDRESS
+        to: ADDRESS
+        subject: User feedback from try-it
 
     limits:
       total: 64

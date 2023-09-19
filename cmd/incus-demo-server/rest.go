@@ -6,7 +6,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/smtp"
 	"strconv"
+	"strings"
+	"text/template"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -92,7 +95,54 @@ func restFeedbackPostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if config.Server.Feedback.Email.Server != "" {
+		go emailFeedback(feedback)
+	}
+
 	return
+}
+
+var emailTpl = template.Must(template.New("emailTpl").Parse(`From: {{ .from }}
+To: {{ .to }}
+Subject: {{ .subject }}
+
+You received some new user feedback from try-it.
+
+Rating: {{ .rating }} / 5
+{{ if .email }}
+E-mail: {{ .email }}
+{{ end }}
+Message:
+"""
+{{ .message }}
+"""
+`))
+
+func emailFeedback(feedback Feedback) {
+	data := map[string]any{
+		"from":    config.Server.Feedback.Email.From,
+		"to":      config.Server.Feedback.Email.To,
+		"subject": config.Server.Feedback.Email.Subject,
+		"rating":  feedback.Rating,
+		"email":   "",
+		"message": feedback.Message,
+	}
+	if feedback.EmailUse > 0 {
+		data["email"] = feedback.Email
+	}
+
+	var sb *strings.Builder = &strings.Builder{}
+	err := emailTpl.Execute(sb, data)
+	if err != nil {
+		fmt.Printf("error: %s\n", err)
+		return
+	}
+
+	err = smtp.SendMail(config.Server.Feedback.Email.Server, nil, config.Server.Feedback.Email.From, []string{config.Server.Feedback.Email.To}, []byte(sb.String()))
+	if err != nil {
+		fmt.Printf("error: %s\n", err)
+		return
+	}
 }
 
 func restFeedbackGetHandler(w http.ResponseWriter, r *http.Request) {

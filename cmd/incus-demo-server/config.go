@@ -8,6 +8,12 @@ type serverConfig struct {
 		Feedback struct {
 			Enabled bool `yaml:"enabled"`
 			Timeout int  `yaml:"timeout"`
+			Email   struct {
+				Server  string `yaml:"server"`
+				From    string `yaml:"from"`
+				To      string `yaml:"to"`
+				Subject string `yaml:"subject"`
+			} `yaml:"email"`
 		} `yaml:"feedback"`
 
 		Limits struct {
