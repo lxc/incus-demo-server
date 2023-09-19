@@ -1,3 +1,4 @@
 /incus-demo-server
 /database.sqlite3
 /config.yaml
+*.swp
