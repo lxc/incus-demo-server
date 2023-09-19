@@ -25,6 +25,22 @@ type serverConfig struct {
 		termsHash string
 	} `yaml:"server"`
 
+	Incus struct {
+		Client struct {
+			Certificate string `yaml:"certificate"`
+			Key         string `yaml:"key"`
+		}
+
+		Project string `yaml:"project"`
+
+		Server struct {
+			Certificate string `yaml:"certificate"`
+			URL         string `yaml:"url"`
+		} `yaml:"server"`
+
+		Target string `yaml:"target"`
+	} `yaml:"incus"`
+
 	Instance struct {
 		Source struct {
 			Instance     string `yaml:"instance"`

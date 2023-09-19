@@ -26,6 +26,20 @@ server:
         <li>Any abuse of this service may lead to a ban or other applicable actions</li>
       </ul>
 
+incus:
+  client:
+    certificate: |-
+      PEM
+
+    key: |-
+      PEM
+  project: PROJECT
+  server:
+    url: URL
+    certificate: |-
+      PEM
+  target: some-server
+
 instance:
   source:
 #    instance: "try-it"

@@ -131,9 +131,24 @@ func run() error {
 	// Connect to the Incus daemon
 	warning := false
 	for {
-		incusDaemon, err = incus.ConnectIncusUnix("", nil)
-		if err == nil {
-			break
+		if config.Incus.Server.URL == "" {
+			incusDaemon, err = incus.ConnectIncusUnix("", nil)
+			if err == nil {
+				break
+			}
+		} else {
+			// Setup connection arguments.
+			args := &incus.ConnectionArgs{
+				TLSClientCert: config.Incus.Client.Certificate,
+				TLSClientKey:  config.Incus.Client.Key,
+				TLSServerCert: config.Incus.Server.Certificate,
+			}
+
+			// Connect to the remote server.
+			incusDaemon, err = incus.ConnectIncus(config.Incus.Server.URL, args)
+			if err == nil {
+				break
+			}
 		}
 
 		if !warning {
@@ -141,6 +156,14 @@ func run() error {
 			warning = true
 		}
 		time.Sleep(time.Second)
+	}
+
+	if config.Incus.Project != "" {
+		incusDaemon = incusDaemon.UseProject(config.Incus.Project)
+	}
+
+	if config.Incus.Target != "" {
+		incusDaemon = incusDaemon.UseTarget(config.Incus.Target)
 	}
 
 	if warning {

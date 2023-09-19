@@ -476,58 +476,61 @@ users:
 	}
 
 	// Get the IP (30s timeout)
+	time.Sleep(2 * time.Second)
+
 	var instanceIP string
-	if !config.Session.ConsoleOnly {
-		time.Sleep(2 * time.Second)
-		timeout := 30
-		for timeout != 0 {
-			timeout--
-			ct, _, err := incusDaemon.GetInstanceState(instanceName)
-			if err != nil {
-				incusForceDelete(incusDaemon, instanceName)
-				restStartError(w, err, instanceUnknownError)
-				return
+	timeout := 30
+	for timeout != 0 {
+		timeout--
+		instState, _, err := incusDaemon.GetInstanceState(instanceName)
+		if err != nil {
+			incusForceDelete(incusDaemon, instanceName)
+			restStartError(w, err, instanceUnknownError)
+			return
+		}
+
+		for netName, net := range instState.Network {
+			if api.InstanceType(ct.Type) == api.InstanceTypeContainer {
+				if netName != "eth0" {
+					continue
+				}
+			} else {
+				if netName != "enp5s0" {
+					continue
+				}
 			}
 
-			for netName, net := range ct.Network {
-				if !shared.StringInSlice(netName, []string{"eth0", "lxcbr0"}) {
+			for _, addr := range net.Addresses {
+				if addr.Address == "" {
 					continue
 				}
 
-				for _, addr := range net.Addresses {
-					if addr.Address == "" {
-						continue
-					}
-
-					if addr.Scope != "global" {
-						continue
-					}
-
-					if config.Session.Network == "ipv6" && addr.Family != "inet6" {
-						continue
-					}
-
-					if config.Session.Network == "ipv4" && addr.Family != "inet" {
-						continue
-					}
-
-					instanceIP = addr.Address
-					break
+				if addr.Scope != "global" {
+					continue
 				}
 
-				if instanceIP != "" {
-					break
+				if config.Session.Network == "ipv6" && addr.Family != "inet6" {
+					continue
 				}
+
+				if config.Session.Network == "ipv4" && addr.Family != "inet" {
+					continue
+				}
+
+				instanceIP = addr.Address
+				break
 			}
 
 			if instanceIP != "" {
 				break
 			}
-
-			time.Sleep(500 * time.Millisecond)
 		}
-	} else {
-		instanceIP = "console-only"
+
+		if instanceIP != "" {
+			break
+		}
+
+		time.Sleep(1 * time.Second)
 	}
 
 	instanceExpiry := time.Now().Unix() + int64(config.Session.Expiry)
