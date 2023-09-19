@@ -108,6 +108,35 @@
                 </button>
             </div>
 
+            <div class="panel panel-default" id="tryit_feedback_panel" style="display:none">
+                <div class="panel-heading">Feedback</div>
+                <form class="p-form" id="tryit_feedback_submit" style="padding: 15px">
+                    <div class="p-form__group">
+                        <label for="feedbackRating">Rate your experience</label>
+                        <input type="hidden" class="rating rating-tooltip" id="feedbackRating" />
+                    </div>
+
+                    <div class="p-form__group">
+                        <label for="feedbackEmail">Email address (optional)</label>
+                        <input type="email" class="form-control" id="feedbackEmail" placeholder="foo@bar.com"/>
+                        <small id="feedbackEmailHelp" class="form-text text-muted">Fill this to allow us to contact you about your feedback.</small>
+                        <div class="form-check">
+                            <label class="form-check-label">
+                                <input type="checkbox" class="form-check-input" id="feedbackEmailUse"/>
+                                <label for="feedbackEmailUse">I'm interested in hearing more about Incus</label>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="p-form__group">
+                        <label for="feedbackText">Feedback (optional)</label>
+                        <textarea class="form-control" id="feedbackText" rows="5"></textarea>
+                    </div>
+
+                    <button type="submit" class="p-button--positive">Send feedback</button>
+                </form>
+            </div>
+
             <div class="panel panel-danger" id="tryit_error_panel" style="display:none">
                 <div class="panel-heading" id="tryit_error_panel_create" style="display:none">Unable to create a new instance</div>
                 <div class="panel-heading" id="tryit_error_panel_access" style="display:none">Unable to access the instance</div>
@@ -165,6 +194,7 @@
 
             <script src="/static/js/jquery.min.js"></script>
             <script src="/static/js/bootstrap.min.js"></script>
+            <script src="/static/js/bootstrap-rating.min.js"></script>
         </div>
     </body>
 </html>

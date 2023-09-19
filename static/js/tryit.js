@@ -230,6 +230,7 @@ $(document).ready(function() {
                 $('#tryit_status_panel').css("display", "none");
                 $('#tryit_start_panel').css("display", "none");
                 $('#tryit_info_panel').css("display", "inherit");
+                $('#tryit_feedback_panel').css("display", "inherit");
                 $('#tryit_console_panel').css("display", "inherit");
                 $('#tryit_examples_panel').css("display", "inherit");
 
@@ -289,6 +290,7 @@ $(document).ready(function() {
             $('#tryit_status_panel').css("display", "none");
             $('#tryit_start_panel').css("display", "none");
             $('#tryit_info_panel').css("display", "inherit");
+            $('#tryit_feedback_panel').css("display", "inherit");
             $('#tryit_console_panel').css("display", "inherit");
             $('#tryit_examples_panel').css("display", "inherit");
 
@@ -309,6 +311,30 @@ $(document).ready(function() {
                 scrollTop: $('.panel-collapse.in').siblings('.panel-heading').offset().top - 50
             }, 500);
         }
+    });
+
+    $('#tryit_feedback_submit').submit(function(event) {
+        event.preventDefault();
+
+        feedbackRating = $('#feedbackRating').val();
+        if (feedbackRating == "") {
+            feedbackRating = 0
+        }
+
+        feedbackEmailUse = 0
+        if ($('#feedbackEmailUse').is(':checked')) {
+            feedbackEmailUse = 1
+        }
+
+        data = JSON.stringify({"rating": parseInt(feedbackRating),
+                               "email": $('#feedbackEmail').val(),
+                               "email_use": feedbackEmailUse,
+                               "message": $('#feedbackText').val()})
+        $.ajax({url: "http://"+tryit_server+"/1.0/feedback?id="+tryit_console,
+                type: "POST",
+                data: data,
+                contentType: "application/json"})
+        $('#tryit_feedback_panel').css("display", "none");
     });
 
     $('.tabNext').click(function(){
