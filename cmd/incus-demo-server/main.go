@@ -21,34 +21,6 @@ import (
 var incusDaemon incus.InstanceServer
 var config serverConfig
 
-type serverConfig struct {
-	Instance string   `yaml:"instance"`
-	Image    string   `yaml:"image"`
-	Profiles []string `yaml:"profiles"`
-	Command  []string `yaml:"command"`
-
-	Feedback        bool `yaml:"feedback"`
-	FeedbackTimeout int  `yaml:"feedback_timeout"`
-
-	QuotaCPU       int `yaml:"quota_cpu"`
-	QuotaDisk      int `yaml:"quota_disk"`
-	QuotaProcesses int `yaml:"quota_processes"`
-	QuotaRAM       int `yaml:"quota_ram"`
-	QuotaSessions  int `yaml:"quota_sessions"`
-	QuotaTime      int `yaml:"quota_time"`
-
-	ServerAddr           string   `yaml:"server_addr"`
-	ServerBannedIPs      []string `yaml:"server_banned_ips"`
-	ServerConsoleOnly    bool     `yaml:"server_console_only"`
-	ServerInstanceMax    int      `yaml:"server_instance_max"`
-	ServerIPv6Only       bool     `yaml:"server_ipv6_only"`
-	ServerMaintenance    bool     `yaml:"server_maintenance"`
-	ServerStatisticsKeys []string `yaml:"server_statistics_keys"`
-	ServerTerms          string   `yaml:"server_terms"`
-
-	serverTermsHash string
-}
-
 type statusCode int
 
 const (
@@ -85,21 +57,29 @@ func parseConfig() error {
 		return fmt.Errorf("Unable to parse the configuration: %s", err)
 	}
 
-	if config.ServerAddr == "" {
-		config.ServerAddr = ":8080"
+	if config.Server.Address == "" {
+		config.Server.Address = ":8080"
 	}
 
-	if config.Command == nil {
-		config.Command = []string{"bash"}
+	if config.Session.Command == nil {
+		config.Session.Command = []string{"bash"}
 	}
 
-	config.ServerTerms = strings.TrimRight(config.ServerTerms, "\n")
+	if config.Instance.Source.InstanceType == "" {
+		config.Instance.Source.InstanceType = "container"
+	}
+
+	config.Server.Terms = strings.TrimRight(config.Server.Terms, "\n")
 	hash := sha256.New()
-	io.WriteString(hash, config.ServerTerms)
-	config.serverTermsHash = fmt.Sprintf("%x", hash.Sum(nil))
+	io.WriteString(hash, config.Server.Terms)
+	config.Server.termsHash = fmt.Sprintf("%x", hash.Sum(nil))
 
-	if config.Instance == "" && config.Image == "" {
+	if config.Instance.Source.Instance == "" && config.Instance.Source.Image == "" {
 		return fmt.Errorf("No instance or image specified in configuration")
+	}
+
+	if config.Instance.Source.Instance != "" && config.Instance.Source.Image != "" {
+		return fmt.Errorf("Only one of instance or image can be specified as the source")
 	}
 
 	return nil
@@ -210,7 +190,7 @@ func run() error {
 	r.HandleFunc("/1.0/statistics", restStatisticsHandler)
 	r.HandleFunc("/1.0/terms", restTermsHandler)
 
-	err = http.ListenAndServe(config.ServerAddr, r)
+	err = http.ListenAndServe(config.Server.Address, r)
 	if err != nil {
 		return err
 	}

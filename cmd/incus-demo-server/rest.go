@@ -25,7 +25,7 @@ type Feedback struct {
 }
 
 func restFeedbackHandler(w http.ResponseWriter, r *http.Request) {
-	if !config.Feedback {
+	if !config.Server.Feedback.Enabled {
 		http.Error(w, "Feedback reporting is disabled", 400)
 		return
 	}
@@ -73,7 +73,7 @@ func restFeedbackPostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if we can still store feedback
-	if time.Now().Unix() > sessionExpiry+int64(config.FeedbackTimeout*60) {
+	if time.Now().Unix() > sessionExpiry+int64(config.Server.Feedback.Timeout*60) {
 		http.Error(w, "Feedback timeout has been reached", 400)
 		return
 	}
@@ -165,7 +165,7 @@ func restStatusHandler(w http.ResponseWriter, r *http.Request) {
 		failure = true
 	}
 
-	if instanceCount >= config.ServerInstanceMax {
+	if instanceCount >= config.Server.Limits.Total {
 		instanceNext, err = dbNextExpire()
 		if err != nil {
 			failure = true
@@ -176,16 +176,16 @@ func restStatusHandler(w http.ResponseWriter, r *http.Request) {
 	body := make(map[string]interface{})
 	body["client_address"] = address
 	body["client_protocol"] = protocol
-	body["feedback"] = config.Feedback
-	body["server_console_only"] = config.ServerConsoleOnly
-	body["server_ipv6_only"] = config.ServerIPv6Only
-	if !config.ServerMaintenance && !failure {
+	body["feedback"] = config.Server.Feedback.Enabled
+	body["session_console_only"] = config.Session.ConsoleOnly
+	body["session_network"] = config.Session.Network
+	if !config.Server.Maintenance && !failure {
 		body["server_status"] = serverOperational
 	} else {
 		body["server_status"] = serverMaintenance
 	}
 	body["instance_count"] = instanceCount
-	body["instance_max"] = config.ServerInstanceMax
+	body["instance_max"] = config.Server.Limits.Total
 	body["instance_next"] = instanceNext
 
 	err = json.NewEncoder(w).Encode(body)
@@ -208,7 +208,7 @@ func restStatisticsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Validate API key
 	requestKey := r.FormValue("key")
-	if !shared.StringInSlice(requestKey, config.ServerStatisticsKeys) {
+	if !shared.StringInSlice(requestKey, config.Server.Statistics.Keys) {
 		http.Error(w, "Invalid authentication key", 401)
 		return
 	}
@@ -266,8 +266,8 @@ func restTermsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Generate the response
 	body := make(map[string]interface{})
-	body["hash"] = config.serverTermsHash
-	body["terms"] = config.ServerTerms
+	body["hash"] = config.Server.termsHash
+	body["terms"] = config.Server.Terms
 
 	err := json.NewEncoder(w).Encode(body)
 	if err != nil {
@@ -302,13 +302,13 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if requestTerms != config.serverTermsHash {
+	if requestTerms != config.Server.termsHash {
 		restStartError(w, nil, instanceInvalidTerms)
 		return
 	}
 
 	// Check for banned users
-	if shared.StringInSlice(requestIP, config.ServerBannedIPs) {
+	if shared.StringInSlice(requestIP, config.Server.Blocklist) {
 		restStartError(w, nil, instanceUserBanned)
 		return
 	}
@@ -316,11 +316,11 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	// Count running instances
 	instanceCount, err := dbActiveCount()
 	if err != nil {
-		instanceCount = config.ServerInstanceMax
+		instanceCount = config.Server.Limits.Total
 	}
 
 	// Server is full
-	if instanceCount >= config.ServerInstanceMax {
+	if instanceCount >= config.Server.Limits.Total {
 		restStartError(w, nil, instanceServerFull)
 		return
 	}
@@ -328,10 +328,10 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	// Count instance for requestor IP
 	instanceCount, err = dbActiveCountForIP(requestIP)
 	if err != nil {
-		instanceCount = config.QuotaSessions
+		instanceCount = config.Server.Limits.IP
 	}
 
-	if config.QuotaSessions != 0 && instanceCount >= config.QuotaSessions {
+	if config.Server.Limits.IP != 0 && instanceCount >= config.Server.Limits.IP {
 		restStartError(w, nil, instanceQuotaReached)
 		return
 	}
@@ -342,49 +342,19 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	instancePassword := petname.Adjective()
 	id := uuid.NewRandom().String()
 
-	// Config
-	ctConfig := map[string]string{}
-
-	ctConfig["security.nesting"] = "true"
-	if config.QuotaCPU > 0 {
-		ctConfig["limits.cpu"] = fmt.Sprintf("%d", config.QuotaCPU)
-	}
-
-	if config.QuotaRAM > 0 {
-		ctConfig["limits.memory"] = fmt.Sprintf("%dMB", config.QuotaRAM)
-	}
-
-	if config.QuotaProcesses > 0 {
-		ctConfig["limits.processes"] = fmt.Sprintf("%d", config.QuotaProcesses)
-	}
-
-	if !config.ServerConsoleOnly {
-		ctConfig["user.user-data"] = fmt.Sprintf(`#cloud-config
-ssh_pwauth: True
-manage_etc_hosts: True
-users:
- - name: %s
-   groups: sudo
-   plain_text_passwd: %s
-   lock_passwd: False
-   shell: /bin/bash
-`, instanceUsername, instancePassword)
-	}
-
-	if config.Instance != "" {
+	if config.Instance.Source.Instance != "" {
 		args := incus.InstanceCopyArgs{
 			Name:         instanceName,
 			InstanceOnly: true,
 		}
 
-		source, _, err := incusDaemon.GetInstance(config.Instance)
+		source, _, err := incusDaemon.GetInstance(config.Instance.Source.Instance)
 		if err != nil {
 			restStartError(w, err, instanceUnknownError)
 			return
 		}
 
-		source.Config = ctConfig
-		source.Profiles = config.Profiles
+		source.Profiles = config.Instance.Profiles
 
 		rop, err := incusDaemon.CopyInstance(incusDaemon, *source, &args)
 		if err != nil {
@@ -402,13 +372,13 @@ users:
 			Name: instanceName,
 			Source: api.InstanceSource{
 				Type:     "image",
-				Alias:    config.Image,
+				Alias:    config.Instance.Source.Image,
 				Server:   "https://images.linuxcontainers.org",
 				Protocol: "simplestreams",
 			},
+			Type: api.InstanceType(config.Instance.Source.InstanceType),
 		}
-		req.Config = ctConfig
-		req.Profiles = config.Profiles
+		req.Profiles = config.Instance.Profiles
 
 		rop, err := incusDaemon.CreateInstance(req)
 		if err != nil {
@@ -423,7 +393,7 @@ users:
 		}
 	}
 
-	// Configure the instance devices
+	// Configure the instance devices.
 	ct, etag, err := incusDaemon.GetInstance(instanceName)
 	if err != nil {
 		incusForceDelete(incusDaemon, instanceName)
@@ -431,14 +401,44 @@ users:
 		return
 	}
 
-	if config.QuotaDisk > 0 {
+	if config.Instance.Limits.Disk != "" {
 		_, ok := ct.ExpandedDevices["root"]
 		if ok {
 			ct.Devices["root"] = ct.ExpandedDevices["root"]
-			ct.Devices["root"]["size"] = fmt.Sprintf("%dGB", config.QuotaDisk)
+			ct.Devices["root"]["size"] = config.Instance.Limits.Disk
 		} else {
-			ct.Devices["root"] = map[string]string{"type": "disk", "path": "/", "size": fmt.Sprintf("%dGB", config.QuotaDisk)}
+			ct.Devices["root"] = map[string]string{"type": "disk", "path": "/", "size": config.Instance.Limits.Disk}
 		}
+	}
+
+	// Configure the instance.
+	if api.InstanceType(ct.Type) == api.InstanceTypeContainer {
+		ct.Config["security.nesting"] = "true"
+
+		if config.Instance.Limits.Processes > 0 {
+			ct.Config["limits.processes"] = fmt.Sprintf("%d", config.Instance.Limits.Processes)
+		}
+	}
+
+	if config.Instance.Limits.CPU > 0 {
+		ct.Config["limits.cpu"] = fmt.Sprintf("%d", config.Instance.Limits.CPU)
+	}
+
+	if config.Instance.Limits.Memory != "" {
+		ct.Config["limits.memory"] = config.Instance.Limits.Memory
+	}
+
+	if !config.Session.ConsoleOnly {
+		ct.Config["user.user-data"] = fmt.Sprintf(`#cloud-config
+ssh_pwauth: True
+manage_etc_hosts: True
+users:
+ - name: %s
+   groups: sudo
+   plain_text_passwd: %s
+   lock_passwd: False
+   shell: /bin/bash
+`, instanceUsername, instancePassword)
 	}
 
 	op, err := incusDaemon.UpdateInstance(instanceName, ct.Writable(), etag)
@@ -477,7 +477,7 @@ users:
 
 	// Get the IP (30s timeout)
 	var instanceIP string
-	if !config.ServerConsoleOnly {
+	if !config.Session.ConsoleOnly {
 		time.Sleep(2 * time.Second)
 		timeout := 30
 		for timeout != 0 {
@@ -503,7 +503,11 @@ users:
 						continue
 					}
 
-					if config.ServerIPv6Only && addr.Family != "inet6" {
+					if config.Session.Network == "ipv6" && addr.Family != "inet6" {
+						continue
+					}
+
+					if config.Session.Network == "ipv4" && addr.Family != "inet" {
 						continue
 					}
 
@@ -526,9 +530,9 @@ users:
 		instanceIP = "console-only"
 	}
 
-	instanceExpiry := time.Now().Unix() + int64(config.QuotaTime)
+	instanceExpiry := time.Now().Unix() + int64(config.Session.Expiry)
 
-	if !config.ServerConsoleOnly {
+	if !config.Session.ConsoleOnly {
 		body["ip"] = instanceIP
 		body["username"] = instanceUsername
 		body["password"] = instancePassword
@@ -538,7 +542,7 @@ users:
 	body["expiry"] = instanceExpiry
 
 	// Setup cleanup code
-	duration, err := time.ParseDuration(fmt.Sprintf("%ds", config.QuotaTime))
+	duration, err := time.ParseDuration(fmt.Sprintf("%ds", config.Session.Expiry))
 	if err != nil {
 		incusForceDelete(incusDaemon, instanceName)
 		restStartError(w, err, instanceUnknownError)
@@ -592,7 +596,7 @@ func restInfoHandler(w http.ResponseWriter, r *http.Request) {
 
 	body := make(map[string]interface{})
 
-	if !config.ServerConsoleOnly {
+	if !config.Session.ConsoleOnly {
 		body["ip"] = instanceIP
 		body["username"] = instanceUsername
 		body["password"] = instancePassword
@@ -743,7 +747,7 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req := api.InstanceExecPost{
-		Command:     config.Command,
+		Command:     config.Session.Command,
 		WaitForWS:   true,
 		Interactive: true,
 		Environment: env,
