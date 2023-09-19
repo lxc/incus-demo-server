@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dustinkirkland/golang-petname"
 	"github.com/gorilla/websocket"
 	"github.com/lxc/incus/client"
 	"github.com/lxc/incus/shared"
@@ -337,10 +336,10 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create the instance
-	instanceName := fmt.Sprintf("tryit-%s", petname.Adjective())
-	instanceUsername := petname.Adjective()
-	instancePassword := petname.Adjective()
 	id := uuid.NewRandom().String()
+	instanceName := fmt.Sprintf("tryit-%s", id)
+	instanceUsername := "admin"
+	instancePassword := uuid.NewRandom().String()
 
 	if config.Instance.Source.Instance != "" {
 		args := incus.InstanceCopyArgs{
