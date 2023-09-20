@@ -405,6 +405,16 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 
 		source.Profiles = config.Instance.Profiles
 
+		// Setup volatile.
+		for k, _ := range source.Config {
+			if !strings.HasPrefix(k, "volatile.") {
+				continue
+			}
+
+			delete(source.Config, k)
+		}
+		source.Config["volatile.apply_template"] = "copy"
+
 		rop, err := incusDaemon.CopyInstance(incusDaemon, *source, &args)
 		if err != nil {
 			restStartError(w, err, instanceUnknownError)
