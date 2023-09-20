@@ -25,7 +25,7 @@ type serverConfig struct {
 
 		Statistics struct {
 			Keys []string `yaml:"keys"`
-		} `yaml:"stats"`
+		} `yaml:"statistics"`
 
 		Terms     string `yaml:"terms"`
 		termsHash string
