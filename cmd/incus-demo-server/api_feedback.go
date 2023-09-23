@@ -100,13 +100,15 @@ Subject: {{ .subject }}
 You received some new user feedback from try-it.
 
 Rating: {{ .rating }} / 5
-{{ if .email }}
+{{- if .email }}
 E-mail: {{ .email }}
 {{ end }}
+{{- if .message }}
 Message:
 """
 {{ .message }}
 """
+{{ end }}
 `))
 
 func emailFeedback(feedback Feedback) {
