@@ -5,6 +5,11 @@ import (
 	"net/http"
 )
 
+const (
+	serverOperational statusCode = 0
+	serverMaintenance statusCode = 1
+)
+
 func restStatusHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "Not implemented", 501)

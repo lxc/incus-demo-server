@@ -24,9 +24,6 @@ var config serverConfig
 type statusCode int
 
 const (
-	serverOperational statusCode = 0
-	serverMaintenance statusCode = 1
-
 	instanceStarted      statusCode = 0
 	instanceInvalidTerms statusCode = 1
 	instanceServerFull   statusCode = 2
