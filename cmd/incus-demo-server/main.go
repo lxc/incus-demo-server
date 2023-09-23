@@ -17,20 +17,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Global variables
+// Global variables.
 var incusDaemon incus.InstanceServer
 var config serverConfig
-
-type statusCode int
-
-const (
-	instanceStarted      statusCode = 0
-	instanceInvalidTerms statusCode = 1
-	instanceServerFull   statusCode = 2
-	instanceQuotaReached statusCode = 3
-	instanceUserBanned   statusCode = 4
-	instanceUnknownError statusCode = 5
-)
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())

@@ -16,6 +16,17 @@ import (
 	"github.com/pborman/uuid"
 )
 
+type statusCode int
+
+const (
+	instanceStarted      statusCode = 0
+	instanceInvalidTerms statusCode = 1
+	instanceServerFull   statusCode = 2
+	instanceQuotaReached statusCode = 3
+	instanceUserBanned   statusCode = 4
+	instanceUnknownError statusCode = 5
+)
+
 func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "Not implemented", 501)

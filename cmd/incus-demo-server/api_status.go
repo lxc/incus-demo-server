@@ -5,9 +5,11 @@ import (
 	"net/http"
 )
 
+type serverStatusCode int
+
 const (
-	serverOperational statusCode = 0
-	serverMaintenance statusCode = 1
+	serverOperational serverStatusCode = 0
+	serverMaintenance serverStatusCode = 1
 )
 
 func restStatusHandler(w http.ResponseWriter, r *http.Request) {
