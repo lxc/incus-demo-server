@@ -53,7 +53,7 @@ func restStatusHandler(w http.ResponseWriter, r *http.Request) {
 	body["feedback"] = config.Server.Feedback.Enabled
 	body["session_console_only"] = config.Session.ConsoleOnly
 	body["session_network"] = config.Session.Network
-	if !config.Server.Maintenance.Enabled && !failure {
+	if !config.Server.Maintenance.Enabled && !failure && incusDaemon != nil {
 		body["server_status"] = serverOperational
 	} else {
 		body["server_status"] = serverMaintenance

@@ -33,6 +33,11 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if config.Server.Maintenance.Enabled || incusDaemon == nil {
+		http.Error(w, "Server in maintenance mode", 500)
+		return
+	}
+
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
@@ -341,6 +346,11 @@ func restInfoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if config.Server.Maintenance.Enabled || incusDaemon == nil {
+		http.Error(w, "Server in maintenance mode", 500)
+		return
+	}
+
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
@@ -382,6 +392,11 @@ func restInfoHandler(w http.ResponseWriter, r *http.Request) {
 func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "Not implemented", 501)
+		return
+	}
+
+	if config.Server.Maintenance.Enabled || incusDaemon == nil {
+		http.Error(w, "Server in maintenance mode", 500)
 		return
 	}
 

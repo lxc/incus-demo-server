@@ -72,15 +72,13 @@ func parseConfig() error {
 }
 
 func run() error {
-	var err error
-
-	// Setup configuration
-	err = parseConfig()
+	// Parse the initial configuration.
+	err := parseConfig()
 	if err != nil {
 		return err
 	}
 
-	// Watch for configuration changes
+	// Watch for configuration changes.
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("Unable to setup fsnotify: %s", err)
@@ -114,80 +112,84 @@ func run() error {
 		}
 	}()
 
-	// Connect to the Incus daemon
-	warning := false
-	for {
-		if config.Incus.Server.URL == "" {
-			incusDaemon, err = incus.ConnectIncusUnix("", nil)
-			if err == nil {
-				break
-			}
-		} else {
-			// Setup connection arguments.
-			args := &incus.ConnectionArgs{
-				TLSClientCert: config.Incus.Client.Certificate,
-				TLSClientKey:  config.Incus.Client.Key,
-				TLSServerCert: config.Incus.Server.Certificate,
-			}
-
-			// Connect to the remote server.
-			incusDaemon, err = incus.ConnectIncus(config.Incus.Server.URL, args)
-			if err == nil {
-				break
-			}
-		}
-
-		if !warning {
-			fmt.Printf("Waiting for the Incus server to come online.\n")
-			warning = true
-		}
-		time.Sleep(time.Second)
-	}
-
-	if config.Incus.Project != "" {
-		incusDaemon = incusDaemon.UseProject(config.Incus.Project)
-	}
-
-	if config.Incus.Target != "" {
-		incusDaemon = incusDaemon.UseTarget(config.Incus.Target)
-	}
-
-	if warning {
-		fmt.Printf("Incus is now available. Daemon starting.\n")
-	}
-
-	// Setup the database
+	// Setup the database.
 	err = dbSetup()
 	if err != nil {
 		return fmt.Errorf("Failed to setup the database: %s", err)
 	}
 
-	// Restore cleanup handler for existing instances
-	instances, err := dbActive()
-	if err != nil {
-		return fmt.Errorf("Unable to read current instances: %s", err)
-	}
+	// Connect to the Incus daemon.
+	go func() {
+		warning := false
+		for {
+			if config.Incus.Server.URL == "" {
+				incusDaemon, err = incus.ConnectIncusUnix("", nil)
+				if err == nil {
+					break
+				}
+			} else {
+				// Setup connection arguments.
+				args := &incus.ConnectionArgs{
+					TLSClientCert: config.Incus.Client.Certificate,
+					TLSClientKey:  config.Incus.Client.Key,
+					TLSServerCert: config.Incus.Server.Certificate,
+				}
 
-	for _, entry := range instances {
-		instanceID := int64(entry[0].(int))
-		instanceName := entry[1].(string)
-		instanceExpiry := int64(entry[2].(int))
+				// Connect to the remote server.
+				incusDaemon, err = incus.ConnectIncus(config.Incus.Server.URL, args)
+				if err == nil {
+					break
+				}
+			}
 
-		duration := instanceExpiry - time.Now().Unix()
-		timeDuration, err := time.ParseDuration(fmt.Sprintf("%ds", duration))
-		if err != nil || duration <= 0 {
-			incusForceDelete(incusDaemon, instanceName)
-			dbExpire(instanceID)
-			continue
+			if !warning {
+				fmt.Printf("Waiting for the Incus server to come online.\n")
+				warning = true
+			}
+
+			time.Sleep(time.Second)
 		}
 
-		time.AfterFunc(timeDuration, func() {
-			incusForceDelete(incusDaemon, instanceName)
-			dbExpire(instanceID)
-		})
-	}
+		if config.Incus.Project != "" {
+			incusDaemon = incusDaemon.UseProject(config.Incus.Project)
+		}
 
-	// Setup the HTTP server
+		if config.Incus.Target != "" {
+			incusDaemon = incusDaemon.UseTarget(config.Incus.Target)
+		}
+
+		if warning {
+			fmt.Printf("Incus is now available.\n")
+		}
+
+		// Restore cleanup handler for existing instances.
+		instances, err := dbActive()
+		if err != nil {
+			fmt.Printf("Unable to read current instances: %s", err)
+			return
+		}
+
+		for _, entry := range instances {
+			instanceID := int64(entry[0].(int))
+			instanceName := entry[1].(string)
+			instanceExpiry := int64(entry[2].(int))
+
+			duration := instanceExpiry - time.Now().Unix()
+			timeDuration, err := time.ParseDuration(fmt.Sprintf("%ds", duration))
+			if err != nil || duration <= 0 {
+				incusForceDelete(incusDaemon, instanceName)
+				dbExpire(instanceID)
+				continue
+			}
+
+			time.AfterFunc(timeDuration, func() {
+				incusForceDelete(incusDaemon, instanceName)
+				dbExpire(instanceID)
+			})
+		}
+	}()
+
+	// Setup the HTTP server.
 	r := mux.NewRouter()
 	r.Handle("/", http.RedirectHandler("/static", http.StatusMovedPermanently))
 	r.PathPrefix("/static").Handler(http.StripPrefix("/static", http.FileServer(http.Dir("static/"))))
