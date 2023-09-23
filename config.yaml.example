@@ -16,7 +16,9 @@ server:
       total: 64
       ip: 2
 
-    maintenance: false
+    maintenance:
+      enabled: false
+      message: Custom downtime message
 
     statistics:
       keys:

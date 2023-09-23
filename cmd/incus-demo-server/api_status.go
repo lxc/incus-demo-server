@@ -51,10 +51,11 @@ func restStatusHandler(w http.ResponseWriter, r *http.Request) {
 	body["feedback"] = config.Server.Feedback.Enabled
 	body["session_console_only"] = config.Session.ConsoleOnly
 	body["session_network"] = config.Session.Network
-	if !config.Server.Maintenance && !failure {
+	if !config.Server.Maintenance.Enabled && !failure {
 		body["server_status"] = serverOperational
 	} else {
 		body["server_status"] = serverMaintenance
+		body["server_message"] = config.Server.Maintenance.Message
 	}
 	body["instance_count"] = instanceCount
 	body["instance_max"] = config.Server.Limits.Total

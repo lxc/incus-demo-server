@@ -21,7 +21,10 @@ type serverConfig struct {
 			IP    int `yaml:"ip"`
 		} `yaml:"limits"`
 
-		Maintenance bool `yaml:"maintenance"`
+		Maintenance struct {
+			Enabled bool   `yaml:"enabled"`
+			Message string `yaml:"message"`
+		} `yaml:"maintenance"`
 
 		Statistics struct {
 			Keys []string `yaml:"keys"`
