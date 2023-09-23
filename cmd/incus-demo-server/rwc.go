@@ -7,15 +7,15 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// wrapper implements ReadWriteCloser on top of a websocket connection.
-type wrapper struct {
+// wsWrapper implements ReadWriteCloser on top of a websocket connection.
+type wsWrapper struct {
 	conn   *websocket.Conn
 	reader io.Reader
 	mur    sync.Mutex
 	muw    sync.Mutex
 }
 
-func (w *wrapper) Read(p []byte) (n int, err error) {
+func (w *wsWrapper) Read(p []byte) (n int, err error) {
 	w.mur.Lock()
 	defer w.mur.Unlock()
 
@@ -54,7 +54,7 @@ func (w *wrapper) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
-func (w *wrapper) Write(p []byte) (int, error) {
+func (w *wsWrapper) Write(p []byte) (int, error) {
 	w.muw.Lock()
 	defer w.muw.Unlock()
 

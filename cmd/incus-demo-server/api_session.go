@@ -4,12 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"net/smtp"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -18,312 +15,6 @@ import (
 	"github.com/lxc/incus/shared/api"
 	"github.com/pborman/uuid"
 )
-
-type Feedback struct {
-	Rating   int    `json:"rating"`
-	Email    string `json:"email"`
-	EmailUse int    `json:"email_use"`
-	Message  string `json:"message"`
-}
-
-func restFeedbackHandler(w http.ResponseWriter, r *http.Request) {
-	if !config.Server.Feedback.Enabled {
-		http.Error(w, "Feedback reporting is disabled", 400)
-		return
-	}
-
-	if r.Method == "POST" {
-		restFeedbackPostHandler(w, r)
-		return
-	}
-
-	if r.Method == "GET" {
-		restFeedbackGetHandler(w, r)
-		return
-	}
-
-	if r.Method == "OPTIONS" {
-		origin := r.Header.Get("Origin")
-		if origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		}
-
-		return
-	}
-
-	http.Error(w, "Not implemented", 501)
-}
-
-func restFeedbackPostHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-
-	// Get the id argument
-	id := r.FormValue("id")
-	if id == "" {
-		http.Error(w, "Missing session id", 400)
-		return
-	}
-
-	// Get the instance
-	sessionId, _, _, _, _, sessionExpiry, err := dbGetInstance(id, false)
-	if err != nil || sessionId == -1 {
-		http.Error(w, "Session not found", 404)
-		return
-	}
-
-	// Check if we can still store feedback
-	if time.Now().Unix() > sessionExpiry+int64(config.Server.Feedback.Timeout*60) {
-		http.Error(w, "Feedback timeout has been reached", 400)
-		return
-	}
-
-	// Parse request
-	feedback := Feedback{}
-
-	err = json.NewDecoder(r.Body).Decode(&feedback)
-	if err != nil {
-		http.Error(w, "Invalid JSON data", 400)
-		return
-	}
-
-	err = dbRecordFeedback(sessionId, feedback)
-	if err != nil {
-		http.Error(w, "Unable to record feedback data", 500)
-		return
-	}
-
-	if config.Server.Feedback.Email.Server != "" {
-		go emailFeedback(feedback)
-	}
-
-	return
-}
-
-var emailTpl = template.Must(template.New("emailTpl").Parse(`From: {{ .from }}
-To: {{ .to }}
-Subject: {{ .subject }}
-
-You received some new user feedback from try-it.
-
-Rating: {{ .rating }} / 5
-{{ if .email }}
-E-mail: {{ .email }}
-{{ end }}
-Message:
-"""
-{{ .message }}
-"""
-`))
-
-func emailFeedback(feedback Feedback) {
-	data := map[string]any{
-		"from":    config.Server.Feedback.Email.From,
-		"to":      config.Server.Feedback.Email.To,
-		"subject": config.Server.Feedback.Email.Subject,
-		"rating":  feedback.Rating,
-		"email":   "",
-		"message": feedback.Message,
-	}
-	if feedback.EmailUse > 0 {
-		data["email"] = feedback.Email
-	}
-
-	var sb *strings.Builder = &strings.Builder{}
-	err := emailTpl.Execute(sb, data)
-	if err != nil {
-		fmt.Printf("error: %s\n", err)
-		return
-	}
-
-	err = smtp.SendMail(config.Server.Feedback.Email.Server, nil, config.Server.Feedback.Email.From, []string{config.Server.Feedback.Email.To}, []byte(sb.String()))
-	if err != nil {
-		fmt.Printf("error: %s\n", err)
-		return
-	}
-}
-
-func restFeedbackGetHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-
-	// Get the id argument
-	id := r.FormValue("id")
-	if id == "" {
-		http.Error(w, "Missing session id", 400)
-		return
-	}
-
-	// Get the instance
-	sessionId, _, _, _, _, _, err := dbGetInstance(id, false)
-	if err != nil || sessionId == -1 {
-		http.Error(w, "Session not found", 404)
-		return
-	}
-
-	// Get the feedback
-	feedbackId, feedbackRating, feedbackEmail, feedbackEmailUse, feedbackComment, err := dbGetFeedback(sessionId)
-	if err != nil || feedbackId == -1 {
-		http.Error(w, "No existing feedback", 404)
-		return
-	}
-
-	// Generate the response
-	body := make(map[string]interface{})
-	body["rating"] = feedbackRating
-	body["email"] = feedbackEmail
-	body["email_use"] = feedbackEmailUse
-	body["feedback"] = feedbackComment
-
-	// Return to the client
-	err = json.NewEncoder(w).Encode(body)
-	if err != nil {
-		http.Error(w, "Internal server error", 500)
-		return
-	}
-
-	return
-}
-
-func restStatusHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		http.Error(w, "Not implemented", 501)
-		return
-	}
-
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-
-	var failure bool
-
-	// Parse the remote client information
-	address, protocol, err := restClientIP(r)
-	if err != nil {
-		http.Error(w, "Internal server error", 500)
-		return
-	}
-
-	// Get some instance data
-	var instanceCount int
-	var instanceNext int
-
-	instanceCount, err = dbActiveCount()
-	if err != nil {
-		failure = true
-	}
-
-	if instanceCount >= config.Server.Limits.Total {
-		instanceNext, err = dbNextExpire()
-		if err != nil {
-			failure = true
-		}
-	}
-
-	// Generate the response
-	body := make(map[string]interface{})
-	body["client_address"] = address
-	body["client_protocol"] = protocol
-	body["feedback"] = config.Server.Feedback.Enabled
-	body["session_console_only"] = config.Session.ConsoleOnly
-	body["session_network"] = config.Session.Network
-	if !config.Server.Maintenance && !failure {
-		body["server_status"] = serverOperational
-	} else {
-		body["server_status"] = serverMaintenance
-	}
-	body["instance_count"] = instanceCount
-	body["instance_max"] = config.Server.Limits.Total
-	body["instance_next"] = instanceNext
-
-	err = json.NewEncoder(w).Encode(body)
-	if err != nil {
-		http.Error(w, "Internal server error", 500)
-		return
-	}
-}
-
-func restStatisticsHandler(w http.ResponseWriter, r *http.Request) {
-	var err error
-
-	if r.Method != "GET" {
-		http.Error(w, "Not implemented", 501)
-		return
-	}
-
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-
-	// Validate API key
-	requestKey := r.FormValue("key")
-	if !shared.StringInSlice(requestKey, config.Server.Statistics.Keys) {
-		http.Error(w, "Invalid authentication key", 401)
-		return
-	}
-
-	// Unique host filtering
-	statsUnique := false
-	requestUnique := r.FormValue("unique")
-	if shared.IsTrue(requestUnique) {
-		statsUnique = true
-	}
-
-	// Time period filtering
-	requestPeriod := r.FormValue("period")
-	if !shared.StringInSlice(requestPeriod, []string{"", "total", "current", "hour", "day", "week", "month", "year"}) {
-		http.Error(w, "Invalid period", 400)
-		return
-	}
-
-	statsPeriod := requestPeriod
-
-	if statsPeriod == "" {
-		statsPeriod = "total"
-	}
-
-	// Network filtering
-	requestNetwork := r.FormValue("network")
-	var statsNetwork *net.IPNet
-	if requestNetwork != "" {
-		_, statsNetwork, err = net.ParseCIDR(requestNetwork)
-		if err != nil {
-			http.Error(w, "Invalid network", 400)
-			return
-		}
-	}
-
-	// Query the database
-	count, err := dbGetStats(statsPeriod, statsUnique, statsNetwork)
-	if err != nil {
-		http.Error(w, "Unable to retrieve statistics", 500)
-		return
-	}
-
-	// Return to client
-	w.Write([]byte(fmt.Sprintf("%d\n", count)))
-}
-
-func restTermsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		http.Error(w, "Not implemented", 501)
-		return
-	}
-
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-
-	// Generate the response
-	body := make(map[string]interface{})
-	body["hash"] = config.Server.termsHash
-	body["terms"] = config.Server.Terms
-
-	err := json.NewEncoder(w).Encode(body)
-	if err != nil {
-		http.Error(w, "Internal server error", 500)
-		return
-	}
-}
 
 func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
@@ -406,7 +97,7 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 		source.Profiles = config.Instance.Profiles
 
 		// Setup volatile.
-		for k, _ := range source.Config {
+		for k := range source.Config {
 			if !strings.HasPrefix(k, "volatile.") {
 				continue
 			}
@@ -677,53 +368,6 @@ func restInfoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func restStartError(w http.ResponseWriter, err error, code statusCode) {
-	body := make(map[string]interface{})
-	body["status"] = code
-
-	if err != nil {
-		fmt.Printf("error: %s\n", err)
-	}
-
-	err = json.NewEncoder(w).Encode(body)
-	if err != nil {
-		http.Error(w, "Internal server error", 500)
-		return
-	}
-}
-
-func restClientIP(r *http.Request) (string, string, error) {
-	var address string
-	var protocol string
-
-	viaProxy := r.Header.Get("X-Forwarded-For")
-
-	if viaProxy != "" {
-		address = viaProxy
-	} else {
-		host, _, err := net.SplitHostPort(r.RemoteAddr)
-
-		if err == nil {
-			address = host
-		} else {
-			address = r.RemoteAddr
-		}
-	}
-
-	ip := net.ParseIP(address)
-	if ip == nil {
-		return "", "", fmt.Errorf("Invalid address: %s", address)
-	}
-
-	if ip.To4() == nil {
-		protocol = "IPv6"
-	} else {
-		protocol = "IPv4"
-	}
-
-	return address, protocol, nil
-}
-
 func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "Not implemented", 501)
@@ -794,7 +438,7 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 	outRead, outWrite := io.Pipe()
 
 	// read handler
-	connWrapper := &wrapper{conn: conn}
+	connWrapper := &wsWrapper{conn: conn}
 	go io.Copy(inWrite, connWrapper)
 	go io.Copy(connWrapper, outRead)
 
@@ -841,5 +485,4 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 
 	inWrite.Close()
 	outRead.Close()
-
 }
