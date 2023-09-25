@@ -187,6 +187,29 @@ func run() error {
 				dbExpire(instanceID)
 			})
 		}
+
+		// Delete former pre-allocated instances.
+		instances, err = dbAllocated()
+		if err != nil {
+			fmt.Printf("Unable to read pre-allocated instances: %s", err)
+			return
+		}
+
+		for _, entry := range instances {
+			instanceID := int64(entry[0].(int))
+			instanceName := entry[1].(string)
+
+			incusForceDelete(incusDaemon, instanceName)
+			dbDelete(instanceID)
+		}
+
+		for i := 0; i < config.Instance.Allocate.Count; i++ {
+			err := instancePreAllocate()
+			if err != nil {
+				fmt.Printf("Failed to pre-allocate instance: %s", err)
+				return
+			}
+		}
 	}()
 
 	// Setup the HTTP server.

@@ -136,6 +136,20 @@ func dbActive() ([][]interface{}, error) {
 	return result, nil
 }
 
+func dbAllocated() ([][]interface{}, error) {
+	q := fmt.Sprintf("SELECT id, instance_name, instance_expiry FROM sessions WHERE status=2;")
+	var instanceID int
+	var instanceName string
+	var instanceExpiry int
+	outfmt := []interface{}{instanceID, instanceName, instanceExpiry}
+	result, err := dbQueryScan(db, q, nil, outfmt)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 func dbGetInstance(id string, active bool) (int64, string, string, string, string, int64, error) {
 	var sessionId int64
 	var instanceName string
@@ -190,7 +204,7 @@ func dbGetFeedback(id int64) (int64, int64, string, int64, string, error) {
 	return feedbackId, rating, email, emailUse, feedback, nil
 }
 
-func dbNew(id string, instanceName string, instanceIP string, instanceUsername string, instancePassword string, instanceExpiry int64, requestDate int64, requestIP string, requestTerms string) (int64, error) {
+func dbNew(status int, id string, instanceName string, instanceIP string, instanceUsername string, instancePassword string, instanceExpiry int64, requestDate int64, requestIP string, requestTerms string) (int64, error) {
 	res, err := db.Exec(`
 INSERT INTO sessions (
 	status,
@@ -202,8 +216,8 @@ INSERT INTO sessions (
 	instance_expiry,
 	request_date,
 	request_ip,
-	request_terms) VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-`, id, instanceName, instanceIP, instanceUsername, instancePassword, instanceExpiry, requestDate, requestIP, requestTerms)
+	request_terms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+`, status, id, instanceName, instanceIP, instanceUsername, instancePassword, instanceExpiry, requestDate, requestIP, requestTerms)
 	if err != nil {
 		return 0, err
 	}
@@ -251,9 +265,60 @@ UPDATE feedback SET rating=?, email=?, email_use=?, feedback=? WHERE session_id=
 	return nil
 }
 
+func dbDelete(id int64) error {
+	_, err := db.Exec("DELETE FROM sessions WHERE id=?;", id)
+	return err
+}
+
 func dbExpire(id int64) error {
 	_, err := db.Exec("UPDATE sessions SET status=1 WHERE id=?;", id)
 	return err
+}
+
+func dbIsActive(id int64) bool {
+	var count int
+
+	statement := `SELECT COUNT(id) FROM sessions WHERE status=1 AND id=?;`
+	err := db.QueryRow(statement, id).Scan(&count)
+	if err != nil {
+		return false
+	}
+
+	return count == 1
+}
+
+func dbGetAllocated(instanceExpiry int64, requestDate int64, requestIP string, requestTerms string) (int64, string, string, string, string, string, error) {
+	var id int64
+	var uuid string
+	var instanceName string
+	var instanceIP string
+	var instanceUsername string
+	var instancePassword string
+
+	// Check if feature is enabled at all.
+	if config.Instance.Allocate.Count == 0 {
+		return 0, "", "", "", "", "", fmt.Errorf("Pre-allocated instances isn't enabled")
+	}
+
+	// Find oldest pre-allocated instance.
+	statement := `SELECT id, uuid, instance_name, instance_ip, instance_username, instance_password FROM sessions WHERE status=2 ORDER BY instance_expiry ASC LIMIT 1;`
+	err := db.QueryRow(statement, id).Scan(&id, &uuid, &instanceName, &instanceIP, &instanceUsername, &instancePassword)
+	if err != nil {
+		return 0, "", "", "", "", "", err
+	}
+
+	// No pre-allocated instances available.
+	if id == 0 {
+		return 0, "", "", "", "", "", fmt.Errorf("No available pre-allocated instances")
+	}
+
+	// Update the record to match the new request.
+	_, err = db.Exec("UPDATE sessions SET status=0, instance_expiry=?, request_date=?, request_ip=?, request_terms=? WHERE id=?", instanceExpiry, requestDate, requestIP, requestTerms, id)
+	if err != nil {
+		return 0, "", "", "", "", "", err
+	}
+
+	return id, uuid, instanceName, instanceIP, instanceUsername, instancePassword, nil
 }
 
 func dbActiveCount() (int, error) {

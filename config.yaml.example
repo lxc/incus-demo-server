@@ -48,6 +48,10 @@ incus:
   target: some-server
 
 instance:
+  allocate:
+    count: 4
+    expiry: 21600
+
   source:
 #    instance: "try-it"
     image: "ubuntu/22.04"

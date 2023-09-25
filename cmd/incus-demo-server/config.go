@@ -51,6 +51,11 @@ type serverConfig struct {
 	} `yaml:"incus"`
 
 	Instance struct {
+		Allocate struct {
+			Count  int `yaml:"count"`
+			Expiry int `yaml:"expiry"`
+		} `yaml:"allocate"`
+
 		Source struct {
 			Instance     string `yaml:"instance"`
 			Image        string `yaml:"image"`

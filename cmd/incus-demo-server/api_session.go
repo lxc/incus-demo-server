@@ -6,25 +6,12 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/lxc/incus/client"
 	"github.com/lxc/incus/shared"
 	"github.com/lxc/incus/shared/api"
-	"github.com/pborman/uuid"
-)
-
-type statusCode int
-
-const (
-	instanceStarted      statusCode = 0
-	instanceInvalidTerms statusCode = 1
-	instanceServerFull   statusCode = 2
-	instanceQuotaReached statusCode = 3
-	instanceUserBanned   statusCode = 4
-	instanceUnknownError statusCode = 5
 )
 
 func restStartHandler(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +44,6 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 	}
 
-	body := make(map[string]interface{})
 	requestDate := time.Now().Unix()
 
 	// Extract IP.
@@ -108,261 +94,72 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create the instance
-	statusUpdate("Creating the instance")
-
-	id := uuid.NewRandom().String()
-	instanceName := fmt.Sprintf("tryit-%s", id)
-	instanceUsername := "admin"
-	instancePassword := uuid.NewRandom().String()
-
-	if config.Instance.Source.Instance != "" {
-		args := incus.InstanceCopyArgs{
-			Name:         instanceName,
-			InstanceOnly: true,
-		}
-
-		source, _, err := incusDaemon.GetInstance(config.Instance.Source.Instance)
-		if err != nil {
-			restStartError(w, err, instanceUnknownError)
-			return
-		}
-
-		source.Profiles = config.Instance.Profiles
-
-		// Setup volatile.
-		for k := range source.Config {
-			if !strings.HasPrefix(k, "volatile.") {
-				continue
-			}
-
-			delete(source.Config, k)
-		}
-		source.Config["volatile.apply_template"] = "copy"
-
-		rop, err := incusDaemon.CopyInstance(incusDaemon, *source, &args)
-		if err != nil {
-			restStartError(w, err, instanceUnknownError)
-			return
-		}
-
-		err = rop.Wait()
-		if err != nil {
-			restStartError(w, err, instanceUnknownError)
-			return
-		}
-	} else {
-		req := api.InstancesPost{
-			Name: instanceName,
-			Source: api.InstanceSource{
-				Type:     "image",
-				Alias:    config.Instance.Source.Image,
-				Server:   "https://images.linuxcontainers.org",
-				Protocol: "simplestreams",
-			},
-			Type: api.InstanceType(config.Instance.Source.InstanceType),
-		}
-		req.Profiles = config.Instance.Profiles
-
-		rop, err := incusDaemon.CreateInstance(req)
-		if err != nil {
-			restStartError(w, err, instanceUnknownError)
-			return
-		}
-
-		err = rop.Wait()
-		if err != nil {
-			restStartError(w, err, instanceUnknownError)
-			return
-		}
-	}
-
-	// Configure the instance devices.
-	statusUpdate("Configuring the instance")
-
-	ct, etag, err := incusDaemon.GetInstance(instanceName)
-	if err != nil {
-		incusForceDelete(incusDaemon, instanceName)
-		restStartError(w, err, instanceUnknownError)
-		return
-	}
-
-	if config.Instance.Limits.Disk != "" {
-		_, ok := ct.ExpandedDevices["root"]
-		if ok {
-			ct.Devices["root"] = ct.ExpandedDevices["root"]
-			ct.Devices["root"]["size"] = config.Instance.Limits.Disk
-		} else {
-			ct.Devices["root"] = map[string]string{"type": "disk", "path": "/", "size": config.Instance.Limits.Disk}
-		}
-	}
-
-	// Configure the instance.
-	if api.InstanceType(ct.Type) == api.InstanceTypeContainer {
-		ct.Config["security.nesting"] = "true"
-
-		if config.Instance.Limits.Processes > 0 {
-			ct.Config["limits.processes"] = fmt.Sprintf("%d", config.Instance.Limits.Processes)
-		}
-	}
-
-	if config.Instance.Limits.CPU > 0 {
-		ct.Config["limits.cpu"] = fmt.Sprintf("%d", config.Instance.Limits.CPU)
-	}
-
-	if config.Instance.Limits.Memory != "" {
-		ct.Config["limits.memory"] = config.Instance.Limits.Memory
-	}
-
-	if !config.Session.ConsoleOnly {
-		ct.Config["user.user-data"] = fmt.Sprintf(`#cloud-config
-ssh_pwauth: True
-manage_etc_hosts: True
-users:
- - name: %s
-   groups: sudo
-   plain_text_passwd: %s
-   lock_passwd: False
-   shell: /bin/bash
-`, instanceUsername, instancePassword)
-	}
-
-	op, err := incusDaemon.UpdateInstance(instanceName, ct.Writable(), etag)
-	if err != nil {
-		incusForceDelete(incusDaemon, instanceName)
-		restStartError(w, err, instanceUnknownError)
-		return
-	}
-
-	err = op.Wait()
-	if err != nil {
-		incusForceDelete(incusDaemon, instanceName)
-		restStartError(w, err, instanceUnknownError)
-		return
-	}
-
-	// Start the instance
-	statusUpdate("Starting the instance")
-
-	req := api.InstanceStatePut{
-		Action:  "start",
-		Timeout: -1,
-	}
-
-	op, err = incusDaemon.UpdateInstanceState(instanceName, req, "")
-	if err != nil {
-		incusForceDelete(incusDaemon, instanceName)
-		restStartError(w, err, instanceUnknownError)
-		return
-	}
-
-	err = op.Wait()
-	if err != nil {
-		incusForceDelete(incusDaemon, instanceName)
-		restStartError(w, err, instanceUnknownError)
-		return
-	}
-
-	// Get the IP (30s timeout)
-	time.Sleep(2 * time.Second)
-
-	statusUpdate("Waiting for console")
-
-	var instanceIP string
-	timeout := 30
-	for timeout != 0 {
-		timeout--
-		instState, _, err := incusDaemon.GetInstanceState(instanceName)
-		if err != nil {
-			incusForceDelete(incusDaemon, instanceName)
-			restStartError(w, err, instanceUnknownError)
-			return
-		}
-
-		for netName, net := range instState.Network {
-			if api.InstanceType(ct.Type) == api.InstanceTypeContainer {
-				if netName != "eth0" {
-					continue
-				}
-			} else {
-				if netName != "enp5s0" {
-					continue
-				}
-			}
-
-			for _, addr := range net.Addresses {
-				if addr.Address == "" {
-					continue
-				}
-
-				if addr.Scope != "global" {
-					continue
-				}
-
-				if config.Session.Network == "ipv6" && addr.Family != "inet6" {
-					continue
-				}
-
-				if config.Session.Network == "ipv4" && addr.Family != "inet" {
-					continue
-				}
-
-				instanceIP = addr.Address
-				break
-			}
-
-			if instanceIP != "" {
-				break
-			}
-		}
-
-		if instanceIP != "" {
-			break
-		}
-
-		time.Sleep(1 * time.Second)
-	}
-
+	// Create the instance.
+	var instanceID int64
+	info := map[string]any{}
 	instanceExpiry := time.Now().Unix() + int64(config.Session.Expiry)
 
-	if !config.Session.ConsoleOnly {
-		body["ip"] = instanceIP
-		body["username"] = instanceUsername
-		body["password"] = instancePassword
-		body["fqdn"] = fmt.Sprintf("%s.incus", instanceName)
-	}
-	body["id"] = id
-	body["expiry"] = instanceExpiry
+	id, instanceUUID, instanceName, instanceIP, instanceUsername, instancePassword, err := dbGetAllocated(instanceExpiry, requestDate, requestIP, requestTerms)
+	if err == nil {
+		// Use a pre-created instance.
+		instanceID = id
+		info["id"] = instanceUUID
+		info["name"] = instanceName
+		info["ip"] = instanceIP
+		info["username"] = instanceUsername
+		info["password"] = instancePassword
+		info["expiry"] = instanceExpiry
 
-	// Setup cleanup code
+		// Create a replacement instance.
+		go instancePreAllocate()
+	} else {
+		// Fallback to creating a new one.
+		info, err = instanceCreate(false, statusUpdate)
+		if err != nil {
+			restStartError(w, err, instanceUnknownError)
+			return
+		}
+
+		instanceExpiry = time.Now().Unix() + int64(config.Session.Expiry)
+		instanceID, err = dbNew(
+			0,
+			info["id"].(string),
+			info["name"].(string),
+			info["ip"].(string),
+			info["username"].(string),
+			info["password"].(string),
+			instanceExpiry, requestDate, requestIP, requestTerms)
+		if err != nil {
+			incusForceDelete(incusDaemon, info["name"].(string))
+			restStartError(w, err, instanceUnknownError)
+			return
+		}
+
+		info["expiry"] = instanceExpiry
+	}
+
+	// Setup cleanup code.
 	duration, err := time.ParseDuration(fmt.Sprintf("%ds", config.Session.Expiry))
 	if err != nil {
-		incusForceDelete(incusDaemon, instanceName)
-		restStartError(w, err, instanceUnknownError)
-		return
-	}
-
-	instanceID, err := dbNew(id, instanceName, instanceIP, instanceUsername, instancePassword, instanceExpiry, requestDate, requestIP, requestTerms)
-	if err != nil {
-		incusForceDelete(incusDaemon, instanceName)
+		incusForceDelete(incusDaemon, info["name"].(string))
 		restStartError(w, err, instanceUnknownError)
 		return
 	}
 
 	time.AfterFunc(duration, func() {
-		incusForceDelete(incusDaemon, instanceName)
+		incusForceDelete(incusDaemon, info["name"].(string))
 		dbExpire(instanceID)
 	})
 
-	// Return to the client
-	body["status"] = instanceStarted
-	err = json.NewEncoder(w).Encode(body)
+	err = json.NewEncoder(w).Encode(info)
 	if err != nil {
-		incusForceDelete(incusDaemon, instanceName)
-		http.Error(w, "Internal server error", 500)
+		incusForceDelete(incusDaemon, info["name"].(string))
+		restStartError(w, err, instanceUnknownError)
 		return
 	}
+
 	flusher.Flush()
+	return
 }
 
 func restInfoHandler(w http.ResponseWriter, r *http.Request) {
