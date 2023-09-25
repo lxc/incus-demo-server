@@ -51,27 +51,27 @@ func restFeedbackPostHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
-	// Get the id argument
+	// Get the id argument.
 	id := r.FormValue("id")
 	if id == "" {
 		http.Error(w, "Missing session id", 400)
 		return
 	}
 
-	// Get the instance
+	// Get the instance.
 	sessionId, _, _, _, _, sessionExpiry, err := dbGetInstance(id, false)
 	if err != nil || sessionId == -1 {
 		http.Error(w, "Session not found", 404)
 		return
 	}
 
-	// Check if we can still store feedback
+	// Check if we can still store feedback.
 	if time.Now().Unix() > sessionExpiry+int64(config.Server.Feedback.Timeout*60) {
 		http.Error(w, "Feedback timeout has been reached", 400)
 		return
 	}
 
-	// Parse request
+	// Parse request.
 	feedback := Feedback{}
 
 	err = json.NewDecoder(r.Body).Decode(&feedback)
@@ -142,35 +142,35 @@ func restFeedbackGetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
-	// Get the id argument
+	// Get the id argument.
 	id := r.FormValue("id")
 	if id == "" {
 		http.Error(w, "Missing session id", 400)
 		return
 	}
 
-	// Get the instance
+	// Get the instance.
 	sessionId, _, _, _, _, _, err := dbGetInstance(id, false)
 	if err != nil || sessionId == -1 {
 		http.Error(w, "Session not found", 404)
 		return
 	}
 
-	// Get the feedback
+	// Get the feedback.
 	feedbackId, feedbackRating, feedbackEmail, feedbackEmailUse, feedbackComment, err := dbGetFeedback(sessionId)
 	if err != nil || feedbackId == -1 {
 		http.Error(w, "No existing feedback", 404)
 		return
 	}
 
-	// Generate the response
+	// Generate the response.
 	body := make(map[string]interface{})
 	body["rating"] = feedbackRating
 	body["email"] = feedbackEmail
 	body["email_use"] = feedbackEmailUse
 	body["feedback"] = feedbackComment
 
-	// Return to the client
+	// Return to the client.
 	err = json.NewEncoder(w).Encode(body)
 	if err != nil {
 		http.Error(w, "Internal server error", 500)

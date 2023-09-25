@@ -23,14 +23,14 @@ func restStatusHandler(w http.ResponseWriter, r *http.Request) {
 
 	var failure bool
 
-	// Parse the remote client information
+	// Parse the remote client information.
 	address, protocol, err := restClientIP(r)
 	if err != nil {
 		http.Error(w, "Internal server error", 500)
 		return
 	}
 
-	// Get some instance data
+	// Get some instance data.
 	var instanceCount int
 	var instanceNext int
 
@@ -46,7 +46,7 @@ func restStatusHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Generate the response
+	// Generate the response.
 	body := make(map[string]interface{})
 	body["client_address"] = address
 	body["client_protocol"] = protocol

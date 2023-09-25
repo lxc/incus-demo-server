@@ -14,7 +14,7 @@ func restTermsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
-	// Generate the response
+	// Generate the response.
 	body := make(map[string]interface{})
 	body["hash"] = config.Server.termsHash
 	body["terms"] = config.Server.Terms

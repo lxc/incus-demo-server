@@ -9,7 +9,7 @@ import (
 	"github.com/mattn/go-sqlite3"
 )
 
-// Global variables
+// Global variables.
 var db *sql.DB
 
 func dbSetup() error {
@@ -64,13 +64,13 @@ CREATE TABLE IF NOT EXISTS feedback (
 func dbGetStats(period string, unique bool, network *net.IPNet) (int64, error) {
 	var count int64
 
-	// Deal with unique filter
+	// Deal with unique filter.
 	what := "request_ip"
 	if unique {
 		what = "distinct request_ip"
 	}
 
-	// Deal with period filter
+	// Deal with period filter.
 	where := ""
 	if period == "current" {
 		where = "WHERE status=0"
@@ -217,14 +217,14 @@ INSERT INTO sessions (
 }
 
 func dbRecordFeedback(id int64, feedback Feedback) error {
-	// Get the feedback
+	// Get the feedback.
 	feedbackId, _, _, _, _, err := dbGetFeedback(id)
 	if err != nil {
 		return err
 	}
 
 	if feedbackId == -1 {
-		// Record new feedback
+		// Record new feedback.
 		_, err := db.Exec(`
 INSERT INTO feedback (
 	session_id,
@@ -240,7 +240,7 @@ INSERT INTO feedback (
 		return nil
 	}
 
-	// Update existing feedback
+	// Update existing feedback.
 	_, err = db.Exec(`
 UPDATE feedback SET rating=?, email=?, email_use=?, feedback=? WHERE session_id=?;
 `, feedback.Rating, feedback.Email, feedback.EmailUse, feedback.Message, id)

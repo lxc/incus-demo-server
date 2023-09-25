@@ -19,21 +19,21 @@ func restStatisticsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
-	// Validate API key
+	// Validate API key.
 	requestKey := r.FormValue("key")
 	if !shared.StringInSlice(requestKey, config.Server.Statistics.Keys) {
 		http.Error(w, "Invalid authentication key", 401)
 		return
 	}
 
-	// Unique host filtering
+	// Unique host filtering.
 	statsUnique := false
 	requestUnique := r.FormValue("unique")
 	if shared.IsTrue(requestUnique) {
 		statsUnique = true
 	}
 
-	// Time period filtering
+	// Time period filtering.
 	requestPeriod := r.FormValue("period")
 	if !shared.StringInSlice(requestPeriod, []string{"", "total", "current", "hour", "day", "week", "month", "year"}) {
 		http.Error(w, "Invalid period", 400)
@@ -46,7 +46,7 @@ func restStatisticsHandler(w http.ResponseWriter, r *http.Request) {
 		statsPeriod = "total"
 	}
 
-	// Network filtering
+	// Network filtering.
 	requestNetwork := r.FormValue("network")
 	var statsNetwork *net.IPNet
 	if requestNetwork != "" {
@@ -57,13 +57,13 @@ func restStatisticsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Query the database
+	// Query the database.
 	count, err := dbGetStats(statsPeriod, statsUnique, statsNetwork)
 	if err != nil {
 		http.Error(w, "Unable to retrieve statistics", 500)
 		return
 	}
 
-	// Return to client
+	// Return to client.
 	w.Write([]byte(fmt.Sprintf("%d\n", count)))
 }

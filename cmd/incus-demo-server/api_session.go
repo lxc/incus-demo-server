@@ -60,14 +60,14 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	body := make(map[string]interface{})
 	requestDate := time.Now().Unix()
 
-	// Extract IP
+	// Extract IP.
 	requestIP, _, err := restClientIP(r)
 	if err != nil {
 		restStartError(w, err, instanceUnknownError)
 		return
 	}
 
-	// Check Terms of Service
+	// Check Terms of Service.
 	requestTerms := r.FormValue("terms")
 	if requestTerms == "" {
 		http.Error(w, "Missing terms hash", 400)
@@ -79,25 +79,25 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check for banned users
+	// Check for banned users.
 	if shared.StringInSlice(requestIP, config.Server.Blocklist) {
 		restStartError(w, nil, instanceUserBanned)
 		return
 	}
 
-	// Count running instances
+	// Count running instances.
 	instanceCount, err := dbActiveCount()
 	if err != nil {
 		instanceCount = config.Server.Limits.Total
 	}
 
-	// Server is full
+	// Server is full.
 	if instanceCount >= config.Server.Limits.Total {
 		restStartError(w, nil, instanceServerFull)
 		return
 	}
 
-	// Count instance for requestor IP
+	// Count instance for requestor IP.
 	instanceCount, err = dbActiveCountForIP(requestIP)
 	if err != nil {
 		instanceCount = config.Server.Limits.IP
@@ -379,14 +379,14 @@ func restInfoHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
-	// Get the id
+	// Get the id.
 	id := r.FormValue("id")
 	if id == "" {
 		http.Error(w, "Missing session id", 400)
 		return
 	}
 
-	// Get the instance
+	// Get the instance.
 	sessionId, instanceName, instanceIP, instanceUsername, instancePassword, instanceExpiry, err := dbGetInstance(id, false)
 	if err != nil || sessionId == -1 {
 		http.Error(w, "Session not found", 404)
@@ -404,7 +404,7 @@ func restInfoHandler(w http.ResponseWriter, r *http.Request) {
 	body["id"] = id
 	body["expiry"] = instanceExpiry
 
-	// Return to the client
+	// Return to the client.
 	body["status"] = instanceStarted
 	err = json.NewEncoder(w).Encode(body)
 	if err != nil {
@@ -427,21 +427,21 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// Get the id argument
+	// Get the id argument.
 	id := r.FormValue("id")
 	if id == "" {
 		http.Error(w, "Missing session id", 400)
 		return
 	}
 
-	// Get the instance
+	// Get the instance.
 	sessionId, instanceName, _, _, _, _, err := dbGetInstance(id, true)
 	if err != nil || sessionId == -1 {
 		http.Error(w, "Session not found", 404)
 		return
 	}
 
-	// Get console width and height
+	// Get console width and height.
 	width := r.FormValue("width")
 	height := r.FormValue("height")
 
@@ -463,7 +463,7 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid width value", 400)
 	}
 
-	// Setup websocket with the client
+	// Setup websocket with the client.
 	var upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -479,7 +479,7 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// Connect to the instance
+	// Connect to the instance.
 	env := make(map[string]string)
 	env["USER"] = "root"
 	env["HOME"] = "/root"
@@ -488,12 +488,12 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 	inRead, inWrite := io.Pipe()
 	outRead, outWrite := io.Pipe()
 
-	// read handler
+	// Data handler.
 	connWrapper := &wsWrapper{conn: conn}
 	go io.Copy(inWrite, connWrapper)
 	go io.Copy(connWrapper, outRead)
 
-	// control socket handler
+	// Control socket handler.
 	handler := func(conn *websocket.Conn) {
 		for {
 			_, _, err = conn.ReadMessage()
@@ -503,6 +503,7 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Send the exec request.
 	req := api.InstanceExecPost{
 		Command:     config.Session.Command,
 		WaitForWS:   true,
