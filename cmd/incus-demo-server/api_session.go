@@ -39,7 +39,23 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.WriteHeader(http.StatusOK)
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Internal server error", 500)
+		return
+	}
+	flusher.Flush()
+
+	statusUpdate := func(msg string) {
+		body := make(map[string]interface{})
+		body["message"] = msg
+		_ = json.NewEncoder(w).Encode(body)
+		flusher.Flush()
+	}
 
 	body := make(map[string]interface{})
 	requestDate := time.Now().Unix()
@@ -93,6 +109,8 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create the instance
+	statusUpdate("Creating the instance")
+
 	id := uuid.NewRandom().String()
 	instanceName := fmt.Sprintf("tryit-%s", id)
 	instanceUsername := "admin"
@@ -160,6 +178,8 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Configure the instance devices.
+	statusUpdate("Configuring the instance")
+
 	ct, etag, err := incusDaemon.GetInstance(instanceName)
 	if err != nil {
 		incusForceDelete(incusDaemon, instanceName)
@@ -222,6 +242,8 @@ users:
 	}
 
 	// Start the instance
+	statusUpdate("Starting the instance")
+
 	req := api.InstanceStatePut{
 		Action:  "start",
 		Timeout: -1,
@@ -243,6 +265,8 @@ users:
 
 	// Get the IP (30s timeout)
 	time.Sleep(2 * time.Second)
+
+	statusUpdate("Waiting for network connectivity")
 
 	var instanceIP string
 	timeout := 30
@@ -338,6 +362,7 @@ users:
 		http.Error(w, "Internal server error", 500)
 		return
 	}
+	flusher.Flush()
 }
 
 func restInfoHandler(w http.ResponseWriter, r *http.Request) {
