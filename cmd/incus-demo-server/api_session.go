@@ -266,7 +266,7 @@ users:
 	// Get the IP (30s timeout)
 	time.Sleep(2 * time.Second)
 
-	statusUpdate("Waiting for network connectivity")
+	statusUpdate("Waiting for console")
 
 	var instanceIP string
 	timeout := 30
