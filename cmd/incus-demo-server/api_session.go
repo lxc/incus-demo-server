@@ -522,13 +522,11 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 
 	op, err := incusDaemon.ExecInstance(instanceName, req, &execArgs)
 	if err != nil {
-		http.Error(w, "Internal server error", 500)
 		return
 	}
 
 	err = op.Wait()
 	if err != nil {
-		http.Error(w, "Internal server error", 500)
 		return
 	}
 
