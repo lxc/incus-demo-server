@@ -2,6 +2,8 @@ $(document).ready(function() {
     var tryit_terms_hash = "";
     var tryit_console = "";
     var tryit_server = location.host;
+    var tryit_server_rest = "http://" + tryit_server
+    var tryit_server_websocket = "ws://" + tryit_server
     var original_url = window.location.href.split("?")[0];
     var term = null
     var sock = null
@@ -67,35 +69,22 @@ $(document).ready(function() {
     }
 
     function setupConsole(id) {
-        var element = document.getElementById('tryit_console');
-        var cell = createCell(element);
-        var size = getSize(element, cell);
+        term = new Terminal({fontSize: 12});
+        fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById("tryit_console"));
+        fitAddon.fit();
 
-        var height = Math.max(Math.round(window.innerHeight / 25), 15);
-        var width = size.cols - 1;
-
-        sock = new WebSocket("ws://"+tryit_server+"/1.0/console?id="+id+"&width="+width+"&height="+height);
+        var height = term.rows;
+        var width = term.cols;
+        sock = new WebSocket(tryit_server_websocket + "/1.0/console?id=" + id + "&width=" + width + "&height=" + height);
         sock.onopen = function (e) {
-            term = new Terminal({
-                cols: width,
-                rows: height,
-                useStyle: true,
-                screenKeys: false
-            });
-
+            attachAddon = new AttachAddon.AttachAddon(sock);
+            term.loadAddon(attachAddon);
             $('#tryit_console_reconnect').css("display", "none");
-            term.open(document.getElementById("tryit_console"))
-
-            term.on('data', function(data) {
-                sock.send(data);
-            });
-
-            sock.onmessage = function(msg) {
-                term.write(msg.data);
-            };
 
             sock.onclose = function(msg) {
-                term.destroy();
+                term.dispose();
                 $('#tryit_console_reconnect').css("display", "inherit");
             };
         };
@@ -108,7 +97,7 @@ $(document).ready(function() {
             hSubs   = element.offsetHeight - element.clientHeight,
             h       = element.clientHeight - hSubs,
 
-            x       = cell.clientWidth / 21,
+            x       = cell.clientWidth / 22,
             y       = cell.clientHeight,
 
             cols    = Math.max(Math.floor(w / x), 10),
@@ -166,11 +155,10 @@ $(document).ready(function() {
 
     if (tryit_console == "") {
         $.ajax({
-            url: "http://"+tryit_server+"/1.0",
+            url: tryit_server_rest + "/1.0",
             success: function(data) {
-                if (data.server_console_only == true) {
+                if (data.session_console_only == true) {
                     $('#tryit_ssh_row').css("display", "none");
-                    $('#tryit_incus_row').css("display", "none");
                 }
 
                 if (data.server_status == 1) {
@@ -192,7 +180,7 @@ $(document).ready(function() {
                 $('#tryit_status_panel').css("display", "inherit");
 
                 $.ajax({
-                    url: "http://"+tryit_server+"/1.0/terms"
+                    url: tryit_server_rest + "/1.0/terms"
                 }).then(function(data) {
                     tryit = data;
                     $('#tryit_terms').html(data.terms);
@@ -212,7 +200,7 @@ $(document).ready(function() {
         });
     } else {
         $.ajax({
-            url: "http://"+tryit_server+"/1.0/info?id="+tryit_console,
+            url: tryit_server_rest + "/1.0/info?id=" + tryit_console,
             success: function(data) {
                 if (data.status && data.status != 0) {
                     $('#tryit_start_panel').css("display", "none");
@@ -236,6 +224,7 @@ $(document).ready(function() {
                 $('#tryit_feedback_panel').css("display", "inherit");
                 $('#tryit_console_panel').css("display", "inherit");
                 $('#tryit_examples_panel').css("display", "inherit");
+                $('footer.p-footer').css("display", "none");
 
                 tryit_console = data.id;
                 window.history.pushState("", "", "?id="+tryit_console);
@@ -251,7 +240,17 @@ $(document).ready(function() {
         });
     }
 
+    $('#tryit_terms_checkbox').change(function() {
+        if ($('#tryit_terms_checkbox').prop("checked")) {
+            $('#tryit_accept').removeAttr("disabled");
+        }
+        else {
+            $('#tryit_accept').attr("disabled", "");
+        };
+    });
+
     $('#tryit_accept').click(function() {
+        $('#tryit_accept_terms').css("display", "none");
         $('#tryit_terms_panel').css("display", "none");
         $('#tryit_accept').css("display", "none");
         $('#tryit_progress').css("display", "inherit");
@@ -259,7 +258,7 @@ $(document).ready(function() {
         var last_response_len = false;
         var last_response = "";
         $.ajax({
-            url: "http://"+tryit_server+"/1.0/start?terms="+tryit_terms_hash,
+            url: tryit_server_rest + "/1.0/start?terms=" + tryit_terms_hash,
             xhrFields: {
               onprogress: function(e) {
                 var this_response, response = e.currentTarget.response;
@@ -321,6 +320,7 @@ $(document).ready(function() {
             $('#tryit_feedback_panel').css("display", "inherit");
             $('#tryit_console_panel').css("display", "inherit");
             $('#tryit_examples_panel').css("display", "inherit");
+            $('footer.p-footer').css("display", "none");
 
             tryit_console = data.id;
             window.history.pushState("", "", "?id="+tryit_console);
@@ -341,6 +341,10 @@ $(document).ready(function() {
         }
     });
 
+    $('.js-collapsable').click(function(){
+        $(this).toggleClass('is-hidden');
+    });
+
     $('#tryit_feedback_submit').submit(function(event) {
         event.preventDefault();
 
@@ -358,18 +362,10 @@ $(document).ready(function() {
                                "email": $('#feedbackEmail').val(),
                                "email_use": feedbackEmailUse,
                                "message": $('#feedbackText').val()})
-        $.ajax({url: "http://"+tryit_server+"/1.0/feedback?id="+tryit_console,
+        $.ajax({url: tryit_server_rest + "/1.0/feedback?id=" + tryit_console,
                 type: "POST",
                 data: data,
                 contentType: "application/json"})
         $('#tryit_feedback_panel').css("display", "none");
-    });
-
-    $('.tabNext').click(function(){
-        $('.nav-tabs > .active').next('li').find('a').trigger('click');
-    });
-
-    $('.tabPrevious').click(function(){
-        $('.nav-tabs > .active').prev('li').find('a').trigger('click');
     });
 });
