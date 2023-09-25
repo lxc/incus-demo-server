@@ -219,11 +219,11 @@ $(document).ready(function() {
                     return
                 }
 
-                $('.tryit_instance_id').text(data.id);
-                $('.tryit_instance_ip').text(data.ip);
-                $('.tryit_instance_fqdn').text(data.fqdn);
-                $('.tryit_instance_username').text(data.username);
-                $('.tryit_instance_password').text(data.password);
+                $('#tryit_instance_id').text(data.id);
+                $('#tryit_instance_ip').text(data.ip);
+                $('#tryit_instance_fqdn').text(data.fqdn);
+                $('#tryit_instance_username').text(data.username);
+                $('#tryit_instance_password').text(data.password);
 
                 initializeClock('tryit_clock', data.expiry);
 
@@ -305,11 +305,11 @@ $(document).ready(function() {
                 return
             }
 
-            $('.tryit_instance_console').text(data.id);
-            $('.tryit_instance_ip').text(data.ip);
-            $('.tryit_instance_fqdn').text(data.fqdn);
-            $('.tryit_instance_username').text(data.username);
-            $('.tryit_instance_password').text(data.password);
+            $('#tryit_instance_console').text(data.id);
+            $('#tryit_instance_ip').text(data.ip);
+            $('#tryit_instance_fqdn').text(data.fqdn);
+            $('#tryit_instance_username').text(data.username);
+            $('#tryit_instance_password').text(data.password);
             initializeClock('tryit_clock', data.expiry);
 
             $('#tryit_status_panel').css("display", "none");
