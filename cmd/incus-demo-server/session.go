@@ -284,7 +284,7 @@ func instancePreAllocate() error {
 	}
 
 	time.AfterFunc(duration, func() {
-		if !dbIsActive(instanceID) {
+		if dbIsAllocated(instanceID) {
 			incusForceDelete(incusDaemon, info["name"].(string))
 			dbDelete(instanceID)
 			instancePreAllocate()

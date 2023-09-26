@@ -275,10 +275,10 @@ func dbExpire(id int64) error {
 	return err
 }
 
-func dbIsActive(id int64) bool {
+func dbIsAllocated(id int64) bool {
 	var count int
 
-	statement := `SELECT COUNT(id) FROM sessions WHERE status=1 AND id=?;`
+	statement := `SELECT COUNT(id) FROM sessions WHERE status=2 AND id=?;`
 	err := db.QueryRow(statement, id).Scan(&count)
 	if err != nil {
 		return false
