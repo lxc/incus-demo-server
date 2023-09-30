@@ -99,7 +99,7 @@ Subject: {{ .subject }}
 
 You received some new user feedback from try-it.
 
-{{- if .rating > 0 }}
+{{- if gt .rating 0 }}
 Rating: {{ .rating }} / 5
 {{ end }}
 {{- if .email }}
