@@ -99,18 +99,13 @@ Subject: {{ .subject }}
 
 You received some new user feedback from try-it.
 
-{{- if gt .rating 0 }}
-Rating: {{ .rating }} / 5
-{{ end }}
-{{- if .email }}
-E-mail: {{ .email }}
-{{ end }}
-{{- if .message }}
-Message:
+{{ if gt .rating 0 }}Rating: {{ .rating }} / 5
+{{ end }}{{- if .email }}E-mail: {{ .email }}
+{{ end }}{{- if .message }}Message:
 """
 {{ .message }}
 """
-{{ end }}
+{{- end }}
 `))
 
 func emailFeedback(feedback Feedback) {
