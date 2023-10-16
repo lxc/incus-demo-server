@@ -109,6 +109,10 @@ You received some new user feedback from try-it.
 `))
 
 func emailFeedback(feedback Feedback) {
+	if (feedback.Email == "" || feedback.EmailUse == 0) && feedback.Rating == 0 && feedback.Message == "" {
+		return
+	}
+
 	data := map[string]any{
 		"from":    config.Server.Feedback.Email.From,
 		"to":      config.Server.Feedback.Email.To,
@@ -117,6 +121,7 @@ func emailFeedback(feedback Feedback) {
 		"email":   "",
 		"message": feedback.Message,
 	}
+
 	if feedback.EmailUse > 0 {
 		data["email"] = feedback.Email
 	}
