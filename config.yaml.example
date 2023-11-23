@@ -1,5 +1,7 @@
 server:
-  address: "[::]:8080"
+  api:
+    address: "[::]:8080"
+
   blocklist:
     - 1.2.3.4
 
@@ -19,6 +21,14 @@ server:
   maintenance:
     enabled: false
     message: Custom downtime message
+
+  proxy:
+    address: "[::]:8081"
+    certificate: |-
+      PEM
+
+    key: |-
+      PEM
 
   statistics:
     keys:
