@@ -14,6 +14,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/gorilla/mux"
 	"github.com/lxc/incus/client"
+	incusTls "github.com/lxc/incus/shared/tls"
 	"gopkg.in/yaml.v3"
 )
 
@@ -211,6 +212,21 @@ func run() error {
 			}
 		}
 	}()
+
+	// Spawn the proxy.
+	if config.Server.Proxy.Address != "" {
+		if config.Server.Proxy.Certificate == "" && config.Server.Proxy.Key == "" {
+			cert, key, err := incusTls.GenerateMemCert(false, false)
+			if err != nil {
+				return fmt.Errorf("Failed to generate TLS certificate: %w", err)
+			}
+
+			config.Server.Proxy.Certificate = string(cert)
+			config.Server.Proxy.Key = string(key)
+		}
+
+		go proxyListener()
+	}
 
 	// Setup the HTTP server.
 	r := mux.NewRouter()
