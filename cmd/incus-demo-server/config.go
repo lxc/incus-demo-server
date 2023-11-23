@@ -29,6 +29,12 @@ type serverConfig struct {
 			Message string `yaml:"message"`
 		} `yaml:"maintenance"`
 
+		Proxy struct {
+			Address     string `yaml:"address"`
+			Certificate string `yaml:"certificate"`
+			Key         string `yaml:"key"`
+		} `yaml:"proxy"`
+
 		Statistics struct {
 			Keys []string `yaml:"keys"`
 		} `yaml:"statistics"`
