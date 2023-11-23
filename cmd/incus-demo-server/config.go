@@ -2,7 +2,10 @@ package main
 
 type serverConfig struct {
 	Server struct {
-		Address   string   `yaml:"address"`
+		API struct {
+			Address string `yaml:"address"`
+		} `yaml:"api"`
+
 		Blocklist []string `yaml:"blocklist"`
 
 		Feedback struct {

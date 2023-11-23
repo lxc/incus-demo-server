@@ -43,8 +43,8 @@ func parseConfig() error {
 		return fmt.Errorf("Unable to parse the configuration: %s", err)
 	}
 
-	if config.Server.Address == "" {
-		config.Server.Address = ":8080"
+	if config.Server.API.Address == "" {
+		config.Server.API.Address = ":8080"
 	}
 
 	if config.Session.Command == nil {
@@ -224,7 +224,7 @@ func run() error {
 	r.HandleFunc("/1.0/statistics", restStatisticsHandler)
 	r.HandleFunc("/1.0/terms", restTermsHandler)
 
-	err = http.ListenAndServe(config.Server.Address, r)
+	err = http.ListenAndServe(config.Server.API.Address, r)
 	if err != nil {
 		return err
 	}
