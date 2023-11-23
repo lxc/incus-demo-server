@@ -237,17 +237,16 @@ users:
 	}
 
 	// Return to the client.
-	info["ip"] = ""
 	info["username"] = ""
 	info["password"] = ""
 	info["fqdn"] = ""
 	if !config.Session.ConsoleOnly {
-		info["ip"] = instanceIP
 		info["username"] = instanceUsername
 		info["password"] = instancePassword
 		info["fqdn"] = fmt.Sprintf("%s.incus", instanceName)
 	}
 	info["id"] = id
+	info["ip"] = instanceIP
 	info["name"] = instanceName
 	info["status"] = instanceStarted
 
