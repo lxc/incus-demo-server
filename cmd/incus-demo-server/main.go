@@ -213,9 +213,11 @@ func run() error {
 
 		// Resync instances every hour.
 		go func() {
-			time.Sleep(time.Hour)
+			for {
+				time.Sleep(time.Hour)
 
-			_ = instanceResync()
+				_ = instanceResync()
+			}
 		}()
 
 		// Allocate new instances.
