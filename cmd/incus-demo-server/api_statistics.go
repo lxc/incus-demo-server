@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 
-	"github.com/lxc/incus/shared"
+	"github.com/lxc/incus/shared/util"
 )
 
 func restStatisticsHandler(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +22,7 @@ func restStatisticsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Validate API key.
 	requestKey := r.FormValue("key")
-	if !shared.StringInSlice(requestKey, config.Server.Statistics.Keys) {
+	if !slices.Contains(config.Server.Statistics.Keys, requestKey) {
 		http.Error(w, "Invalid authentication key", 401)
 		return
 	}
@@ -29,13 +30,13 @@ func restStatisticsHandler(w http.ResponseWriter, r *http.Request) {
 	// Unique host filtering.
 	statsUnique := false
 	requestUnique := r.FormValue("unique")
-	if shared.IsTrue(requestUnique) {
+	if util.IsTrue(requestUnique) {
 		statsUnique = true
 	}
 
 	// Time period filtering.
 	requestPeriod := r.FormValue("period")
-	if !shared.StringInSlice(requestPeriod, []string{"", "total", "current", "hour", "day", "week", "month", "year"}) {
+	if !slices.Contains([]string{"", "total", "current", "hour", "day", "week", "month", "year"}, requestPeriod) {
 		http.Error(w, "Invalid period", 400)
 		return
 	}

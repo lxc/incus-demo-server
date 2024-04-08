@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/lxc/incus/client"
-	"github.com/lxc/incus/shared"
 	"github.com/lxc/incus/shared/api"
 )
 
@@ -66,7 +66,7 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check for banned users.
-	if shared.StringInSlice(requestIP, config.Server.Blocklist) {
+	if slices.Contains(config.Server.Blocklist, requestIP) {
 		restStartError(w, nil, instanceUserBanned)
 		return
 	}
