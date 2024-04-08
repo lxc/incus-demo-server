@@ -211,6 +211,13 @@ func run() error {
 			return
 		}
 
+		// Resync instances every hour.
+		go func() {
+			time.Sleep(time.Hour)
+
+			_ = instanceResync()
+		}()
+
 		// Allocate new instances.
 		for i := 0; i < config.Instance.Allocate.Count; i++ {
 			err := instancePreAllocate()
