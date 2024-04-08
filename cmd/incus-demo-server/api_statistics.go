@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/lxc/incus/shared/util"
+	"github.com/lxc/incus/v6/shared/util"
 )
 
 func restStatisticsHandler(w http.ResponseWriter, r *http.Request) {

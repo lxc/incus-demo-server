@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/lxc/incus/client"
-	"github.com/lxc/incus/shared/api"
+	"github.com/lxc/incus/v6/client"
+	"github.com/lxc/incus/v6/shared/api"
 )
 
 func restStartHandler(w http.ResponseWriter, r *http.Request) {

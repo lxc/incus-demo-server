@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lxc/incus/client"
-	"github.com/lxc/incus/shared/api"
+	"github.com/lxc/incus/v6/client"
+	"github.com/lxc/incus/v6/shared/api"
 	"github.com/pborman/uuid"
 )
 

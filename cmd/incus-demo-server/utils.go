@@ -6,8 +6,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/lxc/incus/client"
-	"github.com/lxc/incus/shared/api"
+	"github.com/lxc/incus/v6/client"
+	"github.com/lxc/incus/v6/shared/api"
 )
 
 func incusForceDelete(d incus.InstanceServer, name string) error {

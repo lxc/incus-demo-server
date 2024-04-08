@@ -13,8 +13,8 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gorilla/mux"
-	"github.com/lxc/incus/client"
-	incusTls "github.com/lxc/incus/shared/tls"
+	"github.com/lxc/incus/v6/client"
+	incusTls "github.com/lxc/incus/v6/shared/tls"
 	"gopkg.in/yaml.v3"
 )
 
