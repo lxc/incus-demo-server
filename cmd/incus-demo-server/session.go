@@ -254,10 +254,19 @@ users:
 }
 
 func instancePreAllocate() error {
-	// Create the instance.
-	info, err := instanceCreate(true, nil)
-	if err != nil {
-		return err
+	var info map[string]any
+
+	for {
+		var err error
+
+		// Try to create the isntance.
+		info, err = instanceCreate(true, nil)
+		if err == nil {
+			break
+		}
+
+		// Retry in 30s.
+		time.Sleep(30 * time.Second)
 	}
 
 	// Setup cleanup code.
