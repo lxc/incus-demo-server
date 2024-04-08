@@ -122,6 +122,18 @@ func dbGetStats(period string, unique bool, network *net.IPNet) (int64, error) {
 	return count, nil
 }
 
+func dbShouldExist(name string) (bool, error) {
+	var count int64
+
+	statement := `SELECT COUNT(id) FROM sessions WHERE instance_name=? AND status IN (0, 2);`
+	err := db.QueryRow(statement, name).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+
+	return count == 1, nil
+}
+
 func dbActive() ([][]interface{}, error) {
 	q := fmt.Sprintf("SELECT id, instance_name, instance_expiry FROM sessions WHERE status=0;")
 	var instanceID int

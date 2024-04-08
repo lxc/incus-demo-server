@@ -3,12 +3,16 @@ package main
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lxc/incus/v6/client"
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/pborman/uuid"
 )
+
+// muCreate is used to allow performing operations that require no new instances be created.
+var muCreate sync.RWMutex
 
 type statusCode int
 
@@ -22,6 +26,9 @@ const (
 )
 
 func instanceCreate(allocate bool, statusUpdate func(string)) (map[string]any, error) {
+	muCreate.RLock()
+	defer muCreate.RUnlock()
+
 	info := map[string]any{}
 
 	// Create the instance.
@@ -298,6 +305,39 @@ func instancePreAllocate() error {
 			instancePreAllocate()
 		}
 	})
+
+	return nil
+}
+
+func instanceResync() error {
+	// Make sure no instances get spawned during cleanup.
+	muCreate.Lock()
+	defer muCreate.Unlock()
+
+	// List all existing instances.
+	instanceNames, err := incusDaemon.GetInstanceNames(api.InstanceTypeAny)
+	if err != nil {
+		return err
+	}
+
+	// Check each instance.
+	for _, instanceName := range instanceNames {
+		// Skip anything we didn't create.
+		if !strings.HasPrefix(instanceName, "tryit-") {
+			continue
+		}
+
+		// Check if we have a DB record.
+		ok, err := dbShouldExist(instanceName)
+		if err != nil {
+			return err
+		}
+
+		// If not, delete the instance.
+		if !ok {
+			incusForceDelete(incusDaemon, instanceName)
+		}
+	}
 
 	return nil
 }

@@ -204,6 +204,14 @@ func run() error {
 			dbDelete(instanceID)
 		}
 
+		// Cleanup instance list.
+		err = instanceResync()
+		if err != nil {
+			fmt.Printf("Unable to perform instance cleanup: %s", err)
+			return
+		}
+
+		// Allocate new instances.
 		for i := 0; i < config.Instance.Allocate.Count; i++ {
 			err := instancePreAllocate()
 			if err != nil {

@@ -11,6 +11,9 @@ import (
 )
 
 func incusForceDelete(d incus.InstanceServer, name string) error {
+	muCreate.RLock()
+	defer muCreate.RUnlock()
+
 	req := api.InstanceStatePut{
 		Action:  "stop",
 		Timeout: -1,
