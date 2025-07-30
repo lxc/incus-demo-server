@@ -261,7 +261,7 @@ func restConsoleHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Setup websocket with the client.
-	var upgrader = websocket.Upgrader{
+	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {

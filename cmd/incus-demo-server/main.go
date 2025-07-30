@@ -19,8 +19,10 @@ import (
 )
 
 // Global variables.
-var incusDaemon incus.InstanceServer
-var config serverConfig
+var (
+	incusDaemon incus.InstanceServer
+	config      serverConfig
+)
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
