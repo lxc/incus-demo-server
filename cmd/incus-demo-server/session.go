@@ -243,6 +243,37 @@ users:
 		time.Sleep(1 * time.Second)
 	}
 
+	// Wait for ready command (if set).
+	if len(config.Session.ReadyCommand) > 0 {
+		timeout := 30
+		for timeout != 0 {
+			time.Sleep(time.Second)
+			timeout--
+
+			// Send the exec request.
+			req := api.InstanceExecPost{
+				Command:     config.Session.ReadyCommand,
+				WaitForWS:   false,
+				Interactive: false,
+			}
+
+			op, err := incusDaemon.ExecInstance(instanceName, req, nil)
+			if err != nil {
+				continue
+			}
+
+			_ = op.Wait()
+
+			opAPI := op.Get()
+			if opAPI.Metadata != nil {
+				exitStatusRaw, ok := opAPI.Metadata["return"].(float64)
+				if ok && exitStatusRaw == 0 {
+					break
+				}
+			}
+		}
+	}
+
 	// Return to the client.
 	info["username"] = ""
 	info["password"] = ""

@@ -82,9 +82,10 @@ type serverConfig struct {
 	} `yaml:"instance"`
 
 	Session struct {
-		Command     []string `yaml:"command"`
-		Expiry      int      `yaml:"expiry"`
-		ConsoleOnly bool     `yaml:"console_only"`
-		Network     string   `yaml:"network"`
+		Command      []string `yaml:"command"`
+		ReadyCommand []string `yaml:"ready_command"`
+		Expiry       int      `yaml:"expiry"`
+		ConsoleOnly  bool     `yaml:"console_only"`
+		Network      string   `yaml:"network"`
 	} `yaml:"session"`
 }
