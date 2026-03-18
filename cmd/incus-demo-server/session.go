@@ -161,6 +161,42 @@ users:
 	}
 
 	// Start the instance.
+	instanceIP, err := instanceStart(instanceName, statusUpdate)
+	if err != nil {
+		incusForceDelete(incusDaemon, instanceName)
+		return nil, err
+	}
+
+	// Return to the client.
+	info["username"] = ""
+	info["password"] = ""
+	info["fqdn"] = ""
+	if !config.Session.ConsoleOnly {
+		info["username"] = instanceUsername
+		info["password"] = instancePassword
+		info["fqdn"] = fmt.Sprintf("%s.incus", instanceName)
+	}
+	info["id"] = id
+	info["ip"] = instanceIP
+	info["name"] = instanceName
+	info["status"] = instanceStarted
+
+	return info, nil
+}
+
+func instanceStart(instanceName string, statusUpdate func(string)) (string, error) {
+	// Check if already started.
+	ct, _, err := incusDaemon.GetInstance(instanceName)
+	if err != nil {
+		incusForceDelete(incusDaemon, instanceName)
+		return "", err
+	}
+
+	if ct.Status == "Running" {
+		return "", nil
+	}
+
+	// Start the instance.
 	if statusUpdate != nil {
 		statusUpdate("Starting the instance")
 	}
@@ -170,16 +206,16 @@ users:
 		Timeout: -1,
 	}
 
-	op, err = incusDaemon.UpdateInstanceState(instanceName, req, "")
+	op, err := incusDaemon.UpdateInstanceState(instanceName, req, "")
 	if err != nil {
 		incusForceDelete(incusDaemon, instanceName)
-		return nil, err
+		return "", err
 	}
 
 	err = op.Wait()
 	if err != nil {
 		incusForceDelete(incusDaemon, instanceName)
-		return nil, err
+		return "", err
 	}
 
 	// Get the IP (30s timeout).
@@ -196,7 +232,7 @@ users:
 		instState, _, err := incusDaemon.GetInstanceState(instanceName)
 		if err != nil {
 			incusForceDelete(incusDaemon, instanceName)
-			return nil, err
+			return "", err
 		}
 
 		for netName, net := range instState.Network {
@@ -274,21 +310,7 @@ users:
 		}
 	}
 
-	// Return to the client.
-	info["username"] = ""
-	info["password"] = ""
-	info["fqdn"] = ""
-	if !config.Session.ConsoleOnly {
-		info["username"] = instanceUsername
-		info["password"] = instancePassword
-		info["fqdn"] = fmt.Sprintf("%s.incus", instanceName)
-	}
-	info["id"] = id
-	info["ip"] = instanceIP
-	info["name"] = instanceName
-	info["status"] = instanceStarted
-
-	return info, nil
+	return instanceIP, nil
 }
 
 func instancePreAllocate() error {

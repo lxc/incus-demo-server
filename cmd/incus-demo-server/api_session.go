@@ -112,6 +112,13 @@ func restStartHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Create a replacement instance.
 		go instancePreAllocate()
+
+		// Start if not started yet.
+		_, err = instanceStart(instanceName, statusUpdate)
+		if err != nil {
+			restStartError(w, err, instanceUnknownError)
+			return
+		}
 	} else {
 		// Fallback to creating a new one.
 		info, err = instanceCreate(false, statusUpdate)
