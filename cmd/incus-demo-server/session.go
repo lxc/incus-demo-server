@@ -241,7 +241,7 @@ func instanceStart(instanceName string, statusUpdate func(string)) (string, erro
 					continue
 				}
 			} else {
-				if netName != "enp5s0" {
+				if !slices.Contains([]string{"enp5s0", "_venp5s0"}, netName) {
 					continue
 				}
 			}
